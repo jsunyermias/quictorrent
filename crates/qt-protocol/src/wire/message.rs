@@ -18,8 +18,6 @@ const MSG_PIECE:         u8 = 8;
 const MSG_CANCEL:        u8 = 9;
 const MSG_REJECT:        u8 = 10;
 const MSG_PRIORITY_HINT: u8 = 11;
-const MSG_HASH_REQUEST:  u8 = 12;
-const MSG_HASH_RESPONSE: u8 = 13;
 const MSG_BYE:           u8 = 14;
 
 /// Versión actual del protocolo quictorrent.
@@ -70,12 +68,6 @@ pub enum Message {
 
     /// Sugerencia de prioridad para un archivo.
     PriorityHint { file_index: u16, priority: Priority },
-
-    /// Solicitar hashes Merkle para verificación.
-    HashRequest { file_index: u16, piece_index: u32, proof_layers: u32 },
-
-    /// Respuesta con hashes Merkle.
-    HashResponse { file_index: u16, piece_index: u32, hashes: Bytes },
 
     /// Cierre limpio de la sesión.
     Bye { reason: String },
@@ -163,21 +155,6 @@ impl Message {
                 buf.put_u8(MSG_PRIORITY_HINT);
                 buf.put_u16(*file_index);
                 buf.put_u8(priority.as_u8());
-            }
-
-            Message::HashRequest { file_index, piece_index, proof_layers } => {
-                buf.put_u8(MSG_HASH_REQUEST);
-                buf.put_u16(*file_index);
-                buf.put_u32(*piece_index);
-                buf.put_u32(*proof_layers);
-            }
-
-            Message::HashResponse { file_index, piece_index, hashes } => {
-                buf.put_u8(MSG_HASH_RESPONSE);
-                buf.put_u16(*file_index);
-                buf.put_u32(*piece_index);
-                buf.put_u32(hashes.len() as u32);
-                buf.put_slice(hashes);
             }
 
             Message::Bye { reason } => {
@@ -283,28 +260,6 @@ impl Message {
                 Ok(Message::PriorityHint { file_index, priority })
             }
 
-            MSG_HASH_REQUEST => {
-                chk(&buf, 10, "HashRequest")?;
-                Ok(Message::HashRequest {
-                    file_index:   buf.get_u16(),
-                    piece_index:  buf.get_u32(),
-                    proof_layers: buf.get_u32(),
-                })
-            }
-
-            MSG_HASH_RESPONSE => {
-                chk(&buf, 10, "HashResponse")?;
-                let file_index  = buf.get_u16();
-                let piece_index = buf.get_u32();
-                let len         = buf.get_u32() as usize;
-                chk(&buf, len, "HashResponse.hashes")?;
-                Ok(Message::HashResponse {
-                    file_index,
-                    piece_index,
-                    hashes: buf.copy_to_bytes(len),
-                })
-            }
-
             MSG_BYE => {
                 chk(&buf, 2, "Bye")?;
                 let len = buf.get_u16() as usize;
@@ -353,8 +308,6 @@ mod tests {
     #[test] fn cancel()       { rt(Message::Cancel { file_index: 0, piece_index: 5, begin: 0, length: 16384 }); }
     #[test] fn reject()       { rt(Message::Reject { file_index: 0, piece_index: 5, begin: 0, length: 16384 }); }
     #[test] fn priority_hint(){ rt(Message::PriorityHint { file_index: 2, priority: Priority::High }); }
-    #[test] fn hash_request() { rt(Message::HashRequest { file_index: 0, piece_index: 1, proof_layers: 4 }); }
-    #[test] fn hash_response(){ rt(Message::HashResponse { file_index: 0, piece_index: 1, hashes: Bytes::from(vec![0xABu8; 64]) }); }
     #[test] fn bye()          { rt(Message::Bye { reason: "done".into() }); }
 
     #[test]

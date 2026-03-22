@@ -183,10 +183,6 @@ impl PeerSession {
                     return Err(PeerError::Disconnected);
                 }
 
-                Message::HashRequest { .. } | Message::HashResponse { .. } => {
-                    debug!("hash message (not yet handled)");
-                }
-
                 Message::Hello { .. } | Message::HelloAck { .. } => {
                     warn!("unexpected hello in session loop");
                 }
