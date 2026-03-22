@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::bucket::{KBucket, NodeInfo, K};
+use crate::bucket::{KBucket, NodeInfo};
 use crate::node_id::NodeId;
 
 /// Tabla de routing Kademlia con 256 k-buckets (uno por bit de distancia).

@@ -1,14 +1,13 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use rand::RngCore;
 use tracing::{debug, info, warn};
 
 use crate::{
     bucket::NodeInfo,
-    error::{DhtError, Result},
+    error::Result,
     message::DhtMessage,
     node_id::NodeId,
     store::ValueStore,
@@ -128,7 +127,7 @@ impl DhtNode {
                 Some(DhtMessage::Pong { sender: self.local_id })
             }
 
-            DhtMessage::FindNode { sender, target } => {
+            DhtMessage::FindNode { sender: _, target } => {
                 let nodes = state.table.closest(&target, K);
                 Some(DhtMessage::Nodes { sender: self.local_id, nodes })
             }

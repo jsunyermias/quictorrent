@@ -1,6 +1,4 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use std::net::SocketAddr;
-use serde::{Deserialize, Serialize};
 use crate::bucket::NodeInfo;
 use crate::node_id::NodeId;
 use crate::error::{DhtError, Result};
