@@ -1,0 +1,93 @@
+use serde::{Deserialize, Serialize};
+
+/// Evento de announce.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnnounceEvent {
+    Started,
+    Stopped,
+    Completed,
+    Update,
+}
+
+impl Default for AnnounceEvent {
+    fn default() -> Self { Self::Update }
+}
+
+/// Request de announce enviada por un cliente al tracker.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnnounceRequest {
+    /// Info hash SHA-256 del torrent (hex, 64 chars).
+    pub info_hash:  String,
+    /// Peer ID del cliente (hex, 64 chars).
+    pub peer_id:    String,
+    /// Dirección pública del peer (ip:port).
+    pub addr:       String,
+    /// Evento de ciclo de vida.
+    #[serde(default)]
+    pub event:      AnnounceEvent,
+    /// Bytes subidos desde el último announce.
+    #[serde(default)]
+    pub uploaded:   u64,
+    /// Bytes descargados desde el último announce.
+    #[serde(default)]
+    pub downloaded: u64,
+    /// Bytes que faltan para completar.
+    #[serde(default)]
+    pub left:       u64,
+    /// Número máximo de peers que quiere recibir.
+    #[serde(default = "default_num_want")]
+    pub num_want:   u32,
+}
+
+fn default_num_want() -> u32 { 50 }
+
+/// Peer tal como lo devuelve el tracker.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PeerInfo {
+    pub peer_id: String,
+    pub addr:    String,
+}
+
+/// Respuesta del tracker a un announce.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnnounceResponse {
+    /// Segundos hasta el próximo announce obligatorio.
+    pub interval:   u32,
+    /// Segundos mínimos entre announces (opcional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_interval: Option<u32>,
+    /// Lista de peers para este torrent.
+    pub peers:      Vec<PeerInfo>,
+    /// Número de seeders (tienen el archivo completo).
+    pub complete:   u32,
+    /// Número de leechers (descargando).
+    pub incomplete: u32,
+}
+
+/// Respuesta del tracker a un scrape.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScrapeResponse {
+    pub complete:   u32,
+    pub incomplete: u32,
+    pub downloaded: u32,
+}
+
+/// Registro interno de un peer en el store.
+#[derive(Debug, Clone)]
+pub struct PeerRecord {
+    pub info_hash:  [u8; 32],
+    pub peer_id:    [u8; 32],
+    pub addr:       String,
+    pub uploaded:   u64,
+    pub downloaded: u64,
+    pub left:       u64,
+    pub last_seen:  i64,   // Unix timestamp
+    pub completed:  bool,
+}
+
+impl PeerRecord {
+    pub fn is_seeder(&self) -> bool {
+        self.left == 0 || self.completed
+    }
+}
