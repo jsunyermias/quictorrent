@@ -1,0 +1,19 @@
+[workspace]
+members = [
+    "crates/qt-protocol",
+    "crates/qt-transport",
+    "crates/qt-peer",
+    "crates/qt-pieces",
+    "crates/qt-tracker",
+    "crates/qt-dht",
+    "crates/qt-client",
+]
+resolver = "2"
+
+[workspace.dependencies]
+quinn = "0.11"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+bytes = "1"
+thiserror = "1"
+tracing = "0.1"

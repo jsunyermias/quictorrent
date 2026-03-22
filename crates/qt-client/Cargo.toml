@@ -1,0 +1,12 @@
+[package]
+name = "qt-client"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "quictorrent"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+tracing = { workspace = true }
