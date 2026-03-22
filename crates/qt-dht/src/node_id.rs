@@ -39,8 +39,8 @@ impl NodeId {
     /// Distancia XOR entre dos NodeIds.
     pub fn distance(&self, other: &NodeId) -> Distance {
         let mut d = [0u8; 32];
-        for i in 0..32 {
-            d[i] = self.0[i] ^ other.0[i];
+        for (i, byte) in d.iter_mut().enumerate() {
+            *byte = self.0[i] ^ other.0[i];
         }
         Distance(d)
     }
@@ -55,13 +55,13 @@ impl NodeId {
 
 impl fmt::Debug for NodeId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "NodeId({})", &hex::encode(&self.0[..4]))
+        write!(f, "NodeId({})", hex::encode(&self.0[..4]))
     }
 }
 
 impl fmt::Display for NodeId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
+        write!(f, "{}", hex::encode(self.0))
     }
 }
 

@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use clap::{Parser, Subcommand};
-use qt_protocol::Priority;
 
 #[derive(Parser)]
 #[command(

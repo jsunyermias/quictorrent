@@ -4,8 +4,8 @@
 use std::net::SocketAddr;
 use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
-use qt_pieces::{hash_piece, PieceStore};
-use qt_protocol::{AuthPayload, Message, MessageCodec, PROTOCOL_VERSION};
+use qt_pieces::hash_piece;
+use qt_protocol::{Message, MessageCodec};
 use qt_transport::QuicEndpoint;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
@@ -41,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
     println!("tamaño:       {} bytes", file_size);
     println!("piece_length: {} bytes", piece_length);
     println!("num_pieces:   {}", num_pieces);
-    println!("info_hash:    {}", hex::encode(&info_hash));
+    println!("info_hash:    {}", hex::encode(info_hash));
     println!("escuchando en 0.0.0.0:{}", port);
     println!("---");
 

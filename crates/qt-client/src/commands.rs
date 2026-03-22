@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context, Result};
-use hex;
 
 use qt_dht::{DhtConfig, DhtNode};
 use qt_protocol::Priority;
@@ -14,7 +13,7 @@ use crate::state::{ClientState, DownloadState, TorrentEntry};
 pub async fn cmd_add(
     meta_path: &Path,
     save_path: Option<PathBuf>,
-    priority: Priority,
+    _priority: Priority,
     state_path: &Path,
     config: &Config,
 ) -> Result<()> {
@@ -67,8 +66,8 @@ pub fn cmd_status(state_path: &Path) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<8}  {:<30}  {:>7}  {:>6}  {:>5}  {}",
-        "ID", "NAME", "SIZE", "PROG%", "PEERS", "STATE");
+    println!("{:<8}  {:<30}  {:>7}  {:>6}  {:>5}  STATE",
+        "ID", "NAME", "SIZE", "PROG%", "PEERS");
     println!("{}", "-".repeat(72));
 
     let mut entries: Vec<_> = state.torrents.values().collect();
@@ -155,7 +154,7 @@ pub fn cmd_peers(id: &str, state_path: &Path) -> Result<()> {
 }
 
 /// Arranca el servidor tracker + DHT + endpoint QUIC.
-pub async fn cmd_serve(config: &Config, state_path: &Path) -> Result<()> {
+pub async fn cmd_serve(config: &Config, _state_path: &Path) -> Result<()> {
     println!("starting quictorrent server...");
 
     // DHT

@@ -3,7 +3,7 @@ use tracing::debug;
 
 use crate::{
     error::Result,
-    types::{AnnounceEvent, AnnounceRequest, AnnounceResponse, ScrapeResponse},
+    types::{AnnounceRequest, AnnounceResponse, ScrapeResponse},
 };
 
 /// Cliente HTTP para un tracker quictorrent.
@@ -31,27 +31,7 @@ impl TrackerClient {
     }
 
     /// Envía un announce al tracker.
-    pub async fn announce(
-        &self,
-        info_hash: &[u8; 32],
-        peer_id:   &[u8; 32],
-        addr:      &str,
-        event:     AnnounceEvent,
-        uploaded:  u64,
-        downloaded: u64,
-        left:      u64,
-        num_want:  u32,
-    ) -> Result<AnnounceResponse> {
-        let req = AnnounceRequest {
-            info_hash:  hex::encode(info_hash),
-            peer_id:    hex::encode(peer_id),
-            addr:       addr.to_string(),
-            event,
-            uploaded,
-            downloaded,
-            left,
-            num_want,
-        };
+    pub async fn announce(&self, req: AnnounceRequest) -> Result<AnnounceResponse> {
 
         let url = format!("{}/announce", self.base_url);
         debug!("announcing to {}", url);

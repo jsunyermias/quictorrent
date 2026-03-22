@@ -31,7 +31,7 @@ impl PieceStore {
             info!(path = %path.display(), total_length, "created piece store");
         }
 
-        let num_pieces = ((total_length + piece_length - 1) / piece_length) as u32;
+        let num_pieces = total_length.div_ceil(piece_length) as u32;
 
         Ok(Self { path, piece_length, total_length, num_pieces })
     }

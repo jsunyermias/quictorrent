@@ -2,9 +2,8 @@
 //! Uso: cargo run --bin download -- <ip:puerto> <info_hash_hex> <num_pieces> <piece_length> <output>
 
 use std::net::SocketAddr;
-use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
-use qt_pieces::{hash_piece, verify_piece};
+use qt_pieces::hash_piece;
 use qt_protocol::{AuthPayload, Message, MessageCodec, PROTOCOL_VERSION};
 use qt_transport::QuicEndpoint;
 use tokio_util::codec::{FramedRead, FramedWrite};
@@ -76,13 +75,9 @@ async fn main() -> anyhow::Result<()> {
     // Descargar piezas secuencialmente
     let mut pieces: Vec<Option<Vec<u8>>> = vec![None; num_pieces];
 
-    for pi in 0..num_pieces {
-        let length = if pi + 1 == num_pieces {
-            // La última pieza puede ser más corta — pedimos piece_length y luego truncamos
-            piece_length as u32
-        } else {
-            piece_length as u32
-        };
+    for (pi, slot) in pieces.iter_mut().enumerate() {
+        // La última pieza puede ser más corta — pedimos piece_length y luego truncamos
+        let length = piece_length as u32;
 
         writer.send(Message::Request {
             file_index:  0,
@@ -95,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
             match reader.next().await.unwrap()? {
                 Message::KeepAlive => continue,
                 Message::Piece { piece_index, begin: 0, data, .. } if piece_index == pi as u32 => {
-                    pieces[pi] = Some(data.to_vec());
+                    *slot = Some(data.to_vec());
                     print!("\rpieza {}/{} descargada", pi + 1, num_pieces);
                     std::io::Write::flush(&mut std::io::stdout())?;
                     break;

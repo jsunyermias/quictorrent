@@ -12,6 +12,9 @@ use crate::types::{AnnounceEvent, AnnounceRequest, PeerRecord};
 /// TTL de un peer en segundos. Si no anuncia en este tiempo, se elimina.
 const PEER_TTL_SECS: i64 = 3600;
 
+/// Mapa interno: info_hash → peer_id → PeerRecord.
+type PeerMap = HashMap<[u8; 32], HashMap<[u8; 32], PeerRecord>>;
+
 /// Intervalo de flush a disco en segundos.
 const FLUSH_INTERVAL_SECS: u64 = 300;
 
@@ -25,8 +28,7 @@ fn now() -> i64 {
 /// Store en memoria con persistencia a SQLite.
 #[derive(Clone)]
 pub struct PeerStore {
-    /// info_hash → peer_id_hex → PeerRecord
-    inner: Arc<Mutex<HashMap<[u8; 32], HashMap<[u8; 32], PeerRecord>>>>,
+    inner: Arc<Mutex<PeerMap>>,
     db:    Arc<Mutex<Connection>>,
 }
 

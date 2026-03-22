@@ -14,7 +14,7 @@ use crate::{
     table::RoutingTable,
 };
 
-const ALPHA: usize = 3;   // Paralelismo de queries Kademlia
+const _ALPHA: usize = 3;  // Paralelismo de queries Kademlia (pendiente de implementar)
 const K:     usize = 20;  // Nodos por bucket
 
 /// Configuración del nodo DHT.

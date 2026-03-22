@@ -1,17 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 /// Evento de announce.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AnnounceEvent {
     Started,
     Stopped,
     Completed,
+    #[default]
     Update,
-}
-
-impl Default for AnnounceEvent {
-    fn default() -> Self { Self::Update }
 }
 
 /// Request de announce enviada por un cliente al tracker.

@@ -19,11 +19,11 @@ pub fn piece_length_for_size(file_size: u64) -> u32 {
     const GB: u64 = 1024 * MB;
 
     let piece_len = match file_size {
-        s if s <    1 * MB             => 4  * KB,
+        s if s <    MB                 => 4  * KB,
         s if s <    8 * MB             => 16 * KB,
         s if s <   64 * MB             => 64 * KB,
         s if s <  512 * MB             => 256 * KB,
-        s if s <    4 * GB             => 1  * MB,
+        s if s <    4 * GB             => MB,
         s if s <   32 * GB             => 4  * MB,
         s if s <  256 * GB             => 16 * MB,
         s if s <  512 * GB             => 64 * MB,
@@ -37,7 +37,7 @@ pub fn piece_length_for_size(file_size: u64) -> u32 {
 /// Número de piezas para un archivo dado su tamaño y el tamaño de pieza.
 pub fn num_pieces(file_size: u64, piece_length: u32) -> u32 {
     if file_size == 0 { return 0; }
-    ((file_size + piece_length as u64 - 1) / piece_length as u64) as u32
+    file_size.div_ceil(piece_length as u64) as u32
 }
 
 /// Descripción de un archivo dentro del torrent.
