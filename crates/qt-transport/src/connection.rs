@@ -63,3 +63,11 @@ impl PeerConnection {
         self.inner.stats()
     }
 }
+
+impl PeerConnection {
+    /// Acceso al quinn::Connection subyacente para casos avanzados.
+    /// Usar con precaución — preferir los métodos de alto nivel.
+    pub fn inner_conn(&self) -> &quinn::Connection {
+        &self.inner
+    }
+}

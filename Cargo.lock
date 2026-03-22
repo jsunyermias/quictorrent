@@ -520,6 +520,17 @@ version = "0.1.0"
 [[package]]
 name = "qt-peer"
 version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "qt-protocol",
+ "qt-transport",
+ "quinn",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
 
 [[package]]
 name = "qt-pieces"
