@@ -1118,8 +1118,10 @@ name = "qt-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "clap",
  "dirs-next",
+ "futures-util",
  "hex",
  "qt-dht",
  "qt-peer",
@@ -1130,6 +1132,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
 ]
