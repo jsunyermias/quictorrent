@@ -36,7 +36,10 @@ pub struct TorrentEntry {
     /// Nombre del torrent.
     pub name:        String,
     /// Directorio de descarga.
-    pub save_path:   PathBuf,
+    pub save_path:       PathBuf,
+    /// Ruta al .qtorrent (metainfo completo). Vacía si se añadió antes de esta versión.
+    #[serde(default)]
+    pub metainfo_path:   PathBuf,
     /// Estado actual.
     pub state:       DownloadState,
     /// Bytes descargados.

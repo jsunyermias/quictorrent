@@ -1,6 +1,7 @@
 mod cli;
 mod commands;
 mod config;
+mod daemon;
 mod state;
 
 use std::path::PathBuf;

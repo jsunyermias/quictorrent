@@ -36,16 +36,26 @@ pub async fn cmd_add(
         return Ok(());
     }
 
+    // Guardar copia del .qtorrent en el directorio de configuración.
+    let torrents_dir = config.state_file.parent()
+        .unwrap_or(Path::new("."))
+        .join("torrents");
+    std::fs::create_dir_all(&torrents_dir)?;
+    let meta_dest = torrents_dir.join(format!("{}.qtorrent", id));
+    std::fs::copy(meta_path, &meta_dest)
+        .with_context(|| format!("copying metainfo to {:?}", meta_dest))?;
+
     let total_size = meta.total_size();
     let entry = TorrentEntry {
-        id:         id.clone(),
-        info_hash:  info_hash_hex,
-        name:       meta.name.clone(),
+        id:             id.clone(),
+        info_hash:      info_hash_hex,
+        name:           meta.name.clone(),
         save_path,
-        state:      DownloadState::Queued,
-        downloaded: 0,
+        metainfo_path:  meta_dest,
+        state:          DownloadState::Queued,
+        downloaded:     0,
         total_size,
-        peers:      0,
+        peers:          0,
     };
 
     state.add(entry);
@@ -153,9 +163,9 @@ pub fn cmd_peers(id: &str, state_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Arranca el servidor tracker + DHT + endpoint QUIC.
-pub async fn cmd_serve(config: &Config, _state_path: &Path) -> Result<()> {
-    println!("starting quictorrent server...");
+/// Arranca el servidor: tracker HTTP + DHT + endpoint QUIC + motor de descarga.
+pub async fn cmd_serve(config: &Config, state_path: &Path) -> Result<()> {
+    println!("starting quictorrent daemon...");
 
     // DHT
     let dht_config = DhtConfig {
@@ -164,14 +174,13 @@ pub async fn cmd_serve(config: &Config, _state_path: &Path) -> Result<()> {
         routing_table_path:  Some(config.dht_routing_table.clone()),
     };
     let dht = DhtNode::new(dht_config)?;
-    println!("  DHT node: {}", dht.local_id);
+    println!("  DHT node:  {}", dht.local_id);
 
-    // Tracker
+    // Tracker HTTP
     let db_path = config.state_file.parent()
         .unwrap_or(Path::new("."))
         .join("tracker.db");
-    let store = PeerStore::open(Some(&db_path))?;
-
+    let peer_store = PeerStore::open(Some(&db_path))?;
     let tracker_config = ServerConfig {
         bind_addr:         format!("0.0.0.0:{}", config.listen_port + 1)
             .parse()
@@ -181,22 +190,23 @@ pub async fn cmd_serve(config: &Config, _state_path: &Path) -> Result<()> {
         announce_interval: 1800,
         min_interval:      60,
     };
-
-    println!("  tracker:  http://0.0.0.0:{}/announce", config.listen_port + 1);
-    println!("  QUIC:     quic://0.0.0.0:{}", config.listen_port);
+    println!("  tracker:   http://0.0.0.0:{}/announce", config.listen_port + 1);
+    println!("  QUIC:      quic://0.0.0.0:{}", config.listen_port);
     println!("\npress Ctrl+C to stop");
 
-    let tracker = TrackerServer::new(tracker_config, store);
+    let tracker = TrackerServer::new(tracker_config, peer_store);
 
-    // Señal de cierre
     tokio::select! {
-        result = tracker.run() => {
-            result.map_err(|e| anyhow!("tracker error: {}", e))?;
+        r = tracker.run() => {
+            r.map_err(|e| anyhow!("tracker: {}", e))?;
+        }
+        r = crate::daemon::run_daemon(config, state_path) => {
+            r.map_err(|e| anyhow!("daemon: {}", e))?;
         }
         _ = tokio::signal::ctrl_c() => {
             println!("\nshutting down...");
             dht.save_routing_table()
-                .map_err(|e| anyhow!("failed to save routing table: {}", e))?;
+                .map_err(|e| anyhow!("save routing table: {}", e))?;
             println!("routing table saved");
         }
     }
