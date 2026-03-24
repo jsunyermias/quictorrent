@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "qt"
+name = "qtorrent"
 path = "src/main.rs"
 
 [[bin]]
@@ -35,3 +35,4 @@ futures-util = { version = "0.3", features = ["sink"] }
 tokio-util   = { version = "0.7", features = ["codec"] }
 dirs-next    = "2"
 rand         = "0.8"
+quinn        = { workspace = true }

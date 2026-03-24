@@ -66,10 +66,10 @@ cargo build --release
   /path/to/output.mkv
 
 # CLI completo
-qt torrent add file.qtorrent
-qt torrent start <id>
-qt status
-qt serve
+qtorrent torrent add file.qtorrent
+qtorrent torrent start <id>
+qtorrent status
+qtorrent serve
 ```
 
 ## Tests
