@@ -20,7 +20,7 @@ const MSG_REJECT:        u8 = 10;
 const MSG_PRIORITY_HINT: u8 = 11;
 const MSG_BYE:           u8 = 14;
 
-/// Versión actual del protocolo quictorrent.
+/// Versión actual del protocolo BitTurbulence.
 pub const PROTOCOL_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -34,7 +34,7 @@ pub enum Commands {
 pub enum TorrentAction {
     /// Añade un torrent a la cola.
     Add {
-        /// Fichero .qtorrent (metainfo JSON).
+        /// Fichero .turbulence (metainfo JSON).
         path: PathBuf,
         /// Directorio de descarga (sobreescribe el valor por defecto).
         #[arg(short, long)]

@@ -1,6 +1,6 @@
 # quictorrent
 
-Implementación experimental de un protocolo de transferencia de archivos P2P sobre QUIC, escrita en Rust. Protocolo propio, no compatible con BitTorrent clásico.
+Implementación experimental del protocolo BitTurbulence: transferencia de archivos P2P sobre QUIC, escrita en Rust. No compatible con BitTorrent clásico.
 
 ## Características
 
@@ -66,7 +66,7 @@ cargo build --release
   /path/to/output.mkv
 
 # CLI completo
-quictorrent torrent add file.qtorrent
+quictorrent torrent add file.turbulence
 quictorrent torrent start <id>
 quictorrent status
 quictorrent serve

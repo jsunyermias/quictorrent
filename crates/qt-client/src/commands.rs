@@ -36,12 +36,12 @@ pub async fn cmd_add(
         return Ok(());
     }
 
-    // Guardar copia del .qtorrent en el directorio de configuración.
+    // Guardar copia del .turbulence en el directorio de configuración.
     let torrents_dir = config.state_file.parent()
         .unwrap_or(Path::new("."))
         .join("torrents");
     std::fs::create_dir_all(&torrents_dir)?;
-    let meta_dest = torrents_dir.join(format!("{}.qtorrent", id));
+    let meta_dest = torrents_dir.join(format!("{}.turbulence", id));
     std::fs::copy(meta_path, &meta_dest)
         .with_context(|| format!("copying metainfo to {:?}", meta_dest))?;
 

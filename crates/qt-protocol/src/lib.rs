@@ -1,6 +1,6 @@
 //! # qt-protocol
 //!
-//! Tipos base del protocolo quictorrent: mensajes wire, metainfo,
+//! Tipos base del protocolo BitTurbulence: mensajes wire, metainfo,
 //! info hash SHA-256, prioridades y autenticación.
 //!
 //! ## Módulos principales
@@ -21,6 +21,6 @@ pub mod wire;
 pub use auth::AuthPayload;
 pub use error::{ProtocolError, Result};
 pub use info_hash::InfoHash;
-pub use metainfo::{FileEntry, Metainfo, num_pieces, piece_length_for_size};
+pub use metainfo::{FileEntry, Metainfo, num_pieces, piece_length_for_size, BLOCK_SIZE};
 pub use priority::Priority;
 pub use wire::{Message, MessageCodec, PROTOCOL_VERSION};
