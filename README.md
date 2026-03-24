@@ -8,6 +8,7 @@ Implementación experimental del protocolo BitTurbulence: transferencia de archi
 - **Protocolo wire propio** — mensajes binarios con framing length-prefixed
 - **Piezas adaptativas** — tamaño de pieza calculado automáticamente según el tamaño del archivo (64 KB → 1 GB, siempre potencia de 2, ~2048 piezas por archivo)
 - **Sin compartición de piezas entre archivos** — cada archivo tiene su propio espacio de piezas independiente
+- **Descarga paralela** — múltiples streams QUIC por conexión, un bloque (16 KB) por stream; `BlockScheduler` rarest-first coordina hasta 4 streams simultáneos por peer
 - **9 niveles de prioridad** — por archivo (Minimum → Maximum)
 - **Verificación SHA-256** — integridad garantizada por pieza
 - **DHT Kademlia 256-bit** — descubrimiento de peers sin tracker central
@@ -35,8 +36,8 @@ Implementación experimental del protocolo BitTurbulence: transferencia de archi
 | `qt-protocol` | Mensajes wire, metainfo, info hash SHA-256, prioridades, autenticación |
 | `qt-transport` | Endpoint QUIC con quinn, TLS self-signed, streams tipados |
 | `qt-peer` | Sesión P2P: Hello/HelloAck, estado de disponibilidad, requests |
-| `qt-pieces` | Almacenamiento en disco, picker rarest-first, verificación SHA-256 |
-| `qt-tracker` | Tracker HTTP: announce/scrape, persistencia SQLite, TTL |
+| `qt-pieces` | Almacenamiento en disco, `BlockScheduler` rarest-first por bloque, verificación SHA-256 |
+| `qt-tracker` | Tracker QUIC: announce/scrape, persistencia SQLite, TTL |
 | `qt-dht` | DHT Kademlia 256-bit: routing table, store con TTL, persistencia JSON |
 | `qt-client` | Binario CLI `qt` y herramientas de prueba `seed`/`download` |
 
@@ -77,13 +78,13 @@ quictorrent serve
 cargo test --workspace
 ```
 
-103 tests, 0 fallos.
+129 tests, 0 fallos.
 
 ## Estado del proyecto
 
-Experimental. Transferencia P2P real verificada en red local (hasta 3 GB, SHA-256 correcto).
+Experimental. Transferencia P2P real verificada en red local (hasta 3 GB, SHA-256 correcto). Descarga paralela implementada y verificada con swarm de 8 peers.
 
-**No listo para producción.** Faltan: descarga paralela, NAT traversal, pipeline de requests, limitación de velocidad.
+**No listo para producción.** Faltan: NAT traversal, limitación de velocidad, reanudación de descargas.
 
 ## Licencia
 
