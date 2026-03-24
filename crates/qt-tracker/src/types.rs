@@ -1,6 +1,32 @@
 use serde::{Deserialize, Serialize};
 use hex;
 
+/// Mensaje que el cliente envía al tracker sobre QUIC.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum TrackerMessage {
+    Announce {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        auth_token: Option<String>,
+        #[serde(flatten)]
+        req: AnnounceRequest,
+    },
+    Scrape {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        auth_token: Option<String>,
+        info_hash: String,
+    },
+}
+
+/// Respuesta del tracker al cliente.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum TrackerResponse {
+    Announce(AnnounceResponse),
+    Scrape(ScrapeResponse),
+    Error { message: String },
+}
+
 /// Evento de announce.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

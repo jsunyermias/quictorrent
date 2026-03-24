@@ -8,4 +8,4 @@ pub use client::TrackerClient;
 pub use error::{TrackerError, Result};
 pub use server::{ServerConfig, TrackerServer};
 pub use store::PeerStore;
-pub use types::{AnnounceEvent, AnnounceRequest, AnnounceResponse, PeerInfo, ScrapeResponse};
+pub use types::{AnnounceEvent, AnnounceRequest, AnnounceResponse, PeerInfo, ScrapeResponse, TrackerMessage, TrackerResponse};
