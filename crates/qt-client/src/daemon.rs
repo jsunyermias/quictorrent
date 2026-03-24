@@ -40,7 +40,7 @@ use tokio::time::{interval, timeout};
 use tokio_util::codec::{FramedRead, FramedWrite};
 use tracing::{debug, info, warn};
 
-use qt_pieces::{BlockScheduler, BlockTask, TorrentStore, verify_piece};
+use qt_pieces::{BlockScheduler, BlockTask, TorrentStore, hash_block, piece_root_from_block_hashes};
 use qt_protocol::{AuthPayload, Message, MessageCodec, Metainfo, PROTOCOL_VERSION};
 use qt_tracker::{AnnounceEvent, AnnounceRequest, TrackerClient};
 use qt_transport::{PeerConnection, QuicEndpoint};
@@ -124,28 +124,31 @@ impl TorrentCtx {
         self.have.lock().await[fi].clone()
     }
 
-    /// Lee la pieza completa del disco, verifica SHA-256 y la marca completa.
+    /// Verifica la raíz Merkle de la pieza usando los hashes de bloque
+    /// almacenados en el scheduler (sin releer el disco) y la marca completa.
     ///
     /// Devuelve `true` si la verificación fue correcta.
     /// En caso de fallo resetea todos los bloques de la pieza a `Pending`.
     pub async fn verify_and_complete(&self, fi: usize, pi: u32) -> bool {
-        let data = match self.store.read_piece(fi, pi).await {
-            Ok(d)  => d,
-            Err(e) => {
-                warn!(fi, pi, "read_piece: {e}");
+        let block_hashes = match self.schedulers[fi].lock().await.piece_block_hashes(pi) {
+            Some(h) => h,
+            None => {
+                warn!(fi, pi, "piece_block_hashes unavailable");
                 self.schedulers[fi].lock().await.mark_piece_hash_failed(pi);
                 return false;
             }
         };
-        let expected = &self.meta.files[fi].piece_hashes[pi as usize];
-        if verify_piece(&data, expected) {
+        let expected     = &self.meta.files[fi].piece_hashes[pi as usize];
+        let computed     = piece_root_from_block_hashes(&block_hashes);
+        let piece_bytes  = self.meta.files[fi].piece_len(pi) as u64;
+        if &computed == expected {
             self.have.lock().await[fi][pi as usize] = true;
             self.schedulers[fi].lock().await.mark_piece_verified(pi);
-            self.downloaded.fetch_add(data.len() as u64, Ordering::Relaxed);
-            info!(fi, pi, bytes = data.len(), "piece verified ok");
+            self.downloaded.fetch_add(piece_bytes, Ordering::Relaxed);
+            info!(fi, pi, bytes = piece_bytes, "piece merkle root ok");
             true
         } else {
-            warn!(fi, pi, "hash mismatch — resetting piece to Pending");
+            warn!(fi, pi, "merkle root mismatch — resetting piece to Pending");
             self.schedulers[fi].lock().await.mark_piece_hash_failed(pi);
             false
         }
@@ -203,8 +206,8 @@ fn bytes_to_bitfield(bytes: &[u8], num: usize) -> Vec<bool> {
 
 /// Resultado reportado por un stream worker al coordinador.
 enum StreamResult {
-    /// Bloque descargado y escrito en disco.
-    BlockOk   { stream_id: usize, fi: usize, pi: u32, bi: u32 },
+    /// Bloque descargado y escrito en disco. `hash` = SHA-256(block_data).
+    BlockOk   { stream_id: usize, fi: usize, pi: u32, bi: u32, hash: [u8; 32] },
     /// Bloque fallido (Reject del seeder o error de red).
     BlockFail { stream_id: usize, fi: usize, pi: u32, bi: u32 },
     /// Stream muerto por error QUIC irrecuperable.
@@ -252,8 +255,10 @@ async fn download_stream_worker(
                 Some(Ok(Message::Piece { file_index, piece_index, begin: b, data }))
                     if file_index as usize == fi && piece_index == pi && b == begin =>
                 {
+                    // Calcular hash antes de escribir para el árbol Merkle
+                    let block_hash = hash_block(&data);
                     match ctx.store.write_block(fi, pi, begin, &data).await {
-                        Ok(()) => break StreamResult::BlockOk { stream_id, fi, pi, bi },
+                        Ok(()) => break StreamResult::BlockOk { stream_id, fi, pi, bi, hash: block_hash },
                         Err(e) => {
                             warn!(fi, pi, bi, "write_block: {e}");
                             break StreamResult::BlockFail { stream_id, fi, pi, bi };
@@ -548,16 +553,16 @@ async fn run_peer_downloader(
             // Resultados de los stream workers
             event = result_rx.recv() => {
                 match event {
-                    Some(StreamResult::BlockOk { stream_id, fi, pi, bi }) => {
+                    Some(StreamResult::BlockOk { stream_id, fi, pi, bi, hash }) => {
                         if let Some(slot) = slots.get_mut(&stream_id) {
                             slot.active_block = None;
                         }
 
                         let piece_ready = ctx.schedulers[fi].lock().await
-                            .mark_block_done(pi, bi);
+                            .mark_block_done(pi, bi, hash);
 
                         if piece_ready {
-                            // Verificar SHA-256 y anunciar si ok.
+                            // Verificar raíz Merkle y anunciar si ok.
                             if ctx.verify_and_complete(fi, pi).await {
                                 let _ = ctrl_w.send(Message::HavePiece {
                                     file_index: fi as u16, piece_index: pi,

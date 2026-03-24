@@ -4,7 +4,7 @@
 use std::net::SocketAddr;
 use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
-use qt_pieces::hash_piece;
+use qt_pieces::{hash_block, piece_root, file_root};
 use qt_protocol::{Message, MessageCodec};
 use qt_transport::QuicEndpoint;
 use tokio_util::codec::{FramedRead, FramedWrite};
@@ -27,15 +27,15 @@ async fn main() -> anyhow::Result<()> {
     let file_size = data.len() as u64;
     let piece_length = qt_protocol::piece_length_for_size(file_size) as usize;
 
-    // Calcular hashes de piezas
+    // Calcular raíces Merkle de piezas (árbol bloque → pieza → archivo)
     let pieces: Vec<Vec<u8>> = data.chunks(piece_length).map(|c| c.to_vec()).collect();
     let num_pieces = pieces.len();
-    let hashes: Vec<[u8; 32]> = pieces.iter().map(|p| hash_piece(p)).collect();
-
-    // Info hash = SHA-256 de todos los hashes concatenados
-    let mut all_hashes = Vec::new();
-    for h in &hashes { all_hashes.extend_from_slice(h); }
-    let info_hash = hash_piece(&all_hashes);
+    // piece_root = raíz Merkle de hashes SHA-256 de bloques de 16 KiB
+    let hashes: Vec<[u8; 32]> = pieces.iter().map(|p| piece_root(p)).collect();
+    // file_root = raíz Merkle de piece_roots (relleno a potencia de 2)
+    let f_root = file_root(&hashes);
+    // info_hash = SHA-256(file_root) — para torrent multi-file: SHA-256(root_0 || root_1 || ...)
+    let info_hash = hash_block(&f_root);
 
     println!("archivo:      {}", file_path);
     println!("tamaño:       {} bytes", file_size);

@@ -10,4 +10,9 @@ pub use picker::PiecePicker;
 pub use scheduler::{BlockScheduler, BlockState, BlockTask, MAX_STREAMS_PER_BLOCK, TYPICAL_STREAMS_PER_BLOCK};
 pub use store::PieceStore;
 pub use torrent_store::TorrentStore;
-pub use verify::{hash_piece, verify_piece};
+pub use verify::{
+    hash_block, hash_piece,
+    merkle_parent, merkle_root,
+    piece_root, piece_root_from_block_hashes, file_root,
+    verify_block, verify_piece,
+};

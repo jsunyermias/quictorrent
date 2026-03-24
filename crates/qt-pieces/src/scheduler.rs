@@ -68,6 +68,10 @@ pub struct BlockScheduler {
     /// Estado por bloque: `block_state[pi][bi]`.
     block_state: Vec<Vec<BlockState>>,
 
+    /// Hash SHA-256 de cada bloque recibido: `block_hashes[pi][bi]`.
+    /// `None` mientras el bloque no ha sido recibido todavía.
+    block_hashes: Vec<Vec<Option<[u8; 32]>>>,
+
     /// Pieza marcada como totalmente descargada y con hash verificado.
     piece_done: Vec<bool>,
 
@@ -89,12 +93,16 @@ impl BlockScheduler {
             "piece_length={piece_length} no es múltiplo de BLOCK_SIZE={BLOCK_SIZE}"
         );
 
-        let block_state = (0..num_pieces)
+        let block_state: Vec<Vec<BlockState>> = (0..num_pieces)
             .map(|pi| {
                 let pl = if pi + 1 == num_pieces { last_piece_len } else { piece_length };
                 let nb = pl.div_ceil(BLOCK_SIZE) as usize;
                 vec![BlockState::Pending; nb]
             })
+            .collect();
+
+        let block_hashes: Vec<Vec<Option<[u8; 32]>>> = block_state.iter()
+            .map(|bs| vec![None; bs.len()])
             .collect();
 
         Self {
@@ -103,6 +111,7 @@ impl BlockScheduler {
             last_piece_len,
             num_pieces,
             block_state,
+            block_hashes,
             piece_done:      vec![false; num_pieces],
             piece_verifying: vec![false; num_pieces],
             availability:    vec![0u32;  num_pieces],
@@ -138,26 +147,47 @@ impl BlockScheduler {
 
     // ── Estado de bloques ─────────────────────────────────────────────────────
 
-    /// Marca el bloque `(pi, bi)` como completado (datos escritos en disco).
+    /// Marca el bloque `(pi, bi)` como completado y almacena su hash SHA-256.
+    ///
+    /// `block_hash` debe ser SHA-256 de los datos del bloque, calculado por el
+    /// caller antes de escribir en disco. Se usa para verificar la raíz Merkle
+    /// de la pieza sin necesidad de releer el disco.
     ///
     /// Devuelve `true` si es el primer stream en completar todos los bloques
-    /// de la pieza (es decir, la pieza está lista para verificación SHA-256).
-    /// Solo devuelve `true` una vez por pieza; llamadas posteriores con la
-    /// pieza ya en verificación o completada devuelven `false`.
-    pub fn mark_block_done(&mut self, pi: u32, bi: u32) -> bool {
+    /// de la pieza (es decir, la pieza está lista para verificación Merkle).
+    /// Solo devuelve `true` una vez por pieza; llamadas posteriores devuelven `false`.
+    pub fn mark_block_done(&mut self, pi: u32, bi: u32, block_hash: [u8; 32]) -> bool {
         let pi = pi as usize;
         let bi = bi as usize;
         if pi >= self.num_pieces { return false; }
         if self.piece_done[pi] || self.piece_verifying[pi] { return false; }
         if bi >= self.block_state[pi].len() { return false; }
 
-        self.block_state[pi][bi] = BlockState::Done;
+        self.block_state[pi][bi]  = BlockState::Done;
+        self.block_hashes[pi][bi] = Some(block_hash);
 
         let all_done = self.block_state[pi].iter().all(|s| *s == BlockState::Done);
         if all_done {
             self.piece_verifying[pi] = true;
         }
         all_done
+    }
+
+    /// Devuelve los hashes SHA-256 de todos los bloques de la pieza `pi`,
+    /// en orden de bloque. Solo válido cuando todos los bloques están `Done`
+    /// (es decir, después de que `mark_block_done` haya devuelto `true`).
+    ///
+    /// Con estos hashes se puede calcular la raíz Merkle de la pieza sin
+    /// releer los datos del disco:
+    /// `piece_root = merkle_root(piece_block_hashes(pi))`
+    pub fn piece_block_hashes(&self, pi: u32) -> Option<Vec<[u8; 32]>> {
+        let pi = pi as usize;
+        if pi >= self.num_pieces { return None; }
+        let hashes: Option<Vec<[u8; 32]>> = self.block_hashes[pi]
+            .iter()
+            .copied()
+            .collect();
+        hashes
     }
 
     /// Decrementa el contador in-flight de un bloque (fallo o cancelación).
@@ -185,14 +215,17 @@ impl BlockScheduler {
         }
     }
 
-    /// La verificación SHA-256 de la pieza ha fallado: resetea todos los
-    /// bloques a `Pending` para reintentarla desde cero.
+    /// La verificación Merkle de la pieza ha fallado: resetea todos los
+    /// bloques a `Pending` y borra los hashes almacenados para reintentarla.
     pub fn mark_piece_hash_failed(&mut self, pi: u32) {
         let pi = pi as usize;
         if pi < self.num_pieces {
             self.piece_verifying[pi] = false;
             for b in &mut self.block_state[pi] {
                 *b = BlockState::Pending;
+            }
+            for h in &mut self.block_hashes[pi] {
+                *h = None;
             }
         }
     }
@@ -386,9 +419,9 @@ mod tests {
         // Ahora todos los bloques están InFlight(1). Añadir TYPICAL-1 rondas más
         // hasta saturar el bloque 0 hasta MAX.
         // Marcamos bloques 1,2,3 como Done para que el scheduler solo tenga bloque 0.
-        s.mark_block_done(0, 1);
-        s.mark_block_done(0, 2);
-        s.mark_block_done(0, 3);
+        s.mark_block_done(0, 1, [0u8; 32]);
+        s.mark_block_done(0, 2, [0u8; 32]);
+        s.mark_block_done(0, 3, [0u8; 32]);
         // Bloque 0 tiene InFlight(1). Añadir hasta MAX-1 streams más.
         for expected_n in 2..=MAX_STREAMS_PER_BLOCK {
             let t = s.schedule(&peer).unwrap();
@@ -424,14 +457,14 @@ mod tests {
         // Asignar y completar 3 de 4 bloques
         for bi in 0u32..3 {
             s.schedule(&peer);
-            assert!(!s.mark_block_done(0, bi), "pieza no debe estar completa todavía");
+            assert!(!s.mark_block_done(0, bi, [0u8; 32]));
         }
         // Asignar y completar el último bloque
         s.schedule(&peer);
-        assert!(s.mark_block_done(0, 3), "pieza debe estar lista para verificación");
+        assert!(s.mark_block_done(0, 3, [0u8; 32]));
 
         // Segunda llamada no debe devolver true (ya está en verificación)
-        assert!(!s.mark_block_done(0, 3), "doble verificación no permitida");
+        assert!(!s.mark_block_done(0, 3, [0u8; 32]));
     }
 
     #[test]
@@ -468,7 +501,7 @@ mod tests {
         let peer = vec![true];
 
         // Completar todos los bloques
-        for bi in 0u32..4 { s.schedule(&peer); s.mark_block_done(0, bi); }
+        for bi in 0u32..4 { s.schedule(&peer); s.mark_block_done(0, bi, [0u8; 32]); }
         assert!(s.piece_verifying[0]);
 
         s.mark_piece_hash_failed(0);

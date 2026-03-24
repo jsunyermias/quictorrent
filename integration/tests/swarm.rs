@@ -36,7 +36,7 @@ use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
-use qt_pieces::{BlockScheduler, BlockTask, TorrentStore, hash_piece, verify_piece};
+use qt_pieces::{BlockScheduler, BlockTask, TorrentStore, hash_block, piece_root, file_root, verify_piece};
 use qt_protocol::{
     AuthPayload, FileEntry, Message, MessageCodec, Metainfo, Priority,
     BLOCK_SIZE, PROTOCOL_VERSION,
@@ -130,20 +130,18 @@ impl PeerState {
 fn generate_pieces() -> (Vec<Vec<u8>>, Vec<[u8; 32]>, [u8; 32]) {
     let mut pieces   = Vec::with_capacity(NUM_PIECES);
     let mut hashes   = Vec::with_capacity(NUM_PIECES);
-    let mut all_hash = Vec::new();
 
     for pi in 0..NUM_PIECES {
         // Datos deterministas: byte = (pi * 7 + i) % 251
         let data: Vec<u8> = (0..PIECE_LEN as usize)
             .map(|i| ((pi * 7 + i) % 251) as u8)
             .collect();
-        let h = hash_piece(&data);
-        all_hash.extend_from_slice(&h);
+        let h = piece_root(&data);
         pieces.push(data);
         hashes.push(h);
     }
 
-    let info_hash = hash_piece(&all_hash);
+    let info_hash = hash_block(&file_root(&hashes));
     (pieces, hashes, info_hash)
 }
 
@@ -436,7 +434,7 @@ async fn download_from_peer(
         active_streams -= 1;
 
         if ok {
-            let piece_done = state.scheduler.lock().await.mark_block_done(pi, bi);
+            let piece_done = state.scheduler.lock().await.mark_block_done(pi, bi, [0u8; 32]);
             if piece_done {
                 state.verify_piece_and_mark(pi).await;
             }

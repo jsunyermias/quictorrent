@@ -4,7 +4,7 @@
 use std::io::SeekFrom;
 use std::net::SocketAddr;
 use futures_util::{SinkExt, StreamExt};
-use qt_pieces::hash_piece;
+use qt_pieces::{hash_block, piece_root, file_root};
 use qt_protocol::{AuthPayload, Message, MessageCodec, PROTOCOL_VERSION};
 use qt_transport::QuicEndpoint;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
@@ -79,8 +79,8 @@ async fn main() -> anyhow::Result<()> {
         .write(true).create(true).truncate(true)
         .open(output_path).await?;
 
-    // Solo acumulamos los hashes (32 bytes × num_pieces, nunca los datos completos)
-    let mut piece_hashes: Vec<u8> = Vec::with_capacity(num_pieces * 32);
+    // Acumulamos las raíces Merkle de cada pieza (32 bytes × num_pieces)
+    let mut piece_roots: Vec<[u8; 32]> = Vec::with_capacity(num_pieces);
     let mut total_bytes: u64 = 0;
 
     for pi in 0..num_pieces {
@@ -109,7 +109,7 @@ async fn main() -> anyhow::Result<()> {
         file.write_all(&data).await?;
         total_bytes = pi as u64 * piece_length as u64 + data.len() as u64;
 
-        piece_hashes.extend_from_slice(&hash_piece(&data));
+        piece_roots.push(piece_root(&data));
 
         print!("\rpieza {}/{} descargada", pi + 1, num_pieces);
         let _ = std::io::Write::flush(&mut std::io::stdout());
@@ -120,8 +120,8 @@ async fn main() -> anyhow::Result<()> {
     println!("\nguardado en {}", output_path);
     println!("tamaño: {} bytes", total_bytes);
 
-    // Verificar integridad: hash(concat(hashes_piezas)) == info_hash
-    let computed_hash = hash_piece(&piece_hashes);
+    // Verificar integridad: info_hash = SHA-256(file_root) = SHA-256(Merkle(piece_roots))
+    let computed_hash = hash_block(&file_root(&piece_roots));
     if computed_hash == info_hash {
         println!("✅ verificación SHA-256 correcta");
     } else {

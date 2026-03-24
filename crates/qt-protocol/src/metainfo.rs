@@ -1,4 +1,25 @@
+use sha2::{Digest, Sha256};
 use crate::priority::Priority;
+
+/// Raíz Merkle de un slice de hashes de 32 bytes.
+/// Rellena a la siguiente potencia de 2 con `[0u8; 32]` (igual que BT v2).
+fn merkle_root_of_slices(hashes: &[[u8; 32]]) -> [u8; 32] {
+    if hashes.is_empty() { return [0u8; 32]; }
+    if hashes.len() == 1 { return hashes[0]; }
+    let n = hashes.len().next_power_of_two();
+    let mut layer: Vec<[u8; 32]> = Vec::with_capacity(n);
+    layer.extend_from_slice(hashes);
+    layer.resize(n, [0u8; 32]);
+    while layer.len() > 1 {
+        layer = layer.chunks(2).map(|p| {
+            let mut h = Sha256::new();
+            h.update(p[0]);
+            h.update(p[1]);
+            h.finalize().into()
+        }).collect();
+    }
+    layer[0]
+}
 
 /// Tamaño fijo de bloque de transferencia: 16 KiB.
 ///
@@ -67,7 +88,11 @@ pub struct FileEntry {
     pub path: Vec<String>,
     /// Tamaño en bytes.
     pub size: u64,
-    /// Hashes SHA-256 de cada pieza (32 bytes × num_pieces).
+    /// Raíces Merkle de cada pieza (32 bytes × num_pieces).
+    ///
+    /// Cada entrada es la raíz Merkle de los hashes SHA-256 de los bloques (16 KiB)
+    /// que forman esa pieza — igual que en BitTorrent v2.
+    /// NO es SHA-256 de los datos de la pieza concatenados.
     pub piece_hashes: Vec<[u8; 32]>,
     /// Prioridad inicial de descarga.
     pub priority: Priority,
@@ -99,6 +124,14 @@ impl FileEntry {
         if self.num_pieces() == 0 { return 0; }
         let rem = (self.size % self.piece_length() as u64) as u32;
         if rem == 0 { self.piece_length() } else { rem }
+    }
+
+    /// Raíz Merkle del archivo: raíz Merkle de todas las raíces de pieza.
+    ///
+    /// Equivale al "file merkle root" de BitTorrent v2.
+    /// Se rellena a la siguiente potencia de 2 con hashes cero.
+    pub fn file_root(&self) -> [u8; 32] {
+        merkle_root_of_slices(&self.piece_hashes)
     }
 
     /// Longitud de la pieza `index` (la última puede ser más corta).
@@ -135,6 +168,22 @@ impl Metainfo {
     /// Número total de piezas en todos los archivos.
     pub fn total_pieces(&self) -> u64 {
         self.files.iter().map(|f| f.num_pieces() as u64).sum()
+    }
+
+    /// Calcula el info_hash a partir de los metadatos actuales.
+    ///
+    /// `info_hash = SHA-256(file_root_0 || file_root_1 || ...)`
+    ///
+    /// Donde cada `file_root` es la raíz Merkle de las raíces de pieza del
+    /// archivo correspondiente. Para un torrent de un solo archivo es
+    /// `SHA-256(file_root_0)`.
+    pub fn compute_info_hash(&self) -> [u8; 32] {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        for f in &self.files {
+            h.update(f.file_root());
+        }
+        h.finalize().into()
     }
 }
 
