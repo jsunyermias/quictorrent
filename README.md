@@ -1,6 +1,6 @@
 # quictorrent
 
-Implementación experimental del protocolo BitTurbulence: transferencia de archivos P2P sobre QUIC, escrita en Rust. No compatible con BitTorrent clásico.
+Implementación experimental del protocolo BitTurbulence: transferencia de archivos P2P sobre QUIC, escrita en Rust. Inspirada en BitTorrent.
 
 ## Características
 
