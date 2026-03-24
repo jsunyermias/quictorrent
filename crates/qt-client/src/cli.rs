@@ -4,12 +4,12 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(
     name = "qt",
-    about = "quictorrent — BitTorrent over QUIC",
+    about = "bitturbulence — BitTorrent over QUIC",
     version,
     propagate_version = true,
 )]
 pub struct Cli {
-    /// Fichero de configuración (por defecto ~/.quictorrent/config.json).
+    /// Fichero de configuración (por defecto ~/.bitturbulence/config.json).
     #[arg(long, global = true)]
     pub config: Option<PathBuf>,
 

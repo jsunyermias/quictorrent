@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     let config_path = cli.config.unwrap_or_else(|| {
         dirs_next::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join(".quictorrent")
+            .join(".bitturbulence")
             .join("config.json")
     });
 

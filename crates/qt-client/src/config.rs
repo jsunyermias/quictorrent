@@ -25,7 +25,7 @@ impl Default for Config {
     fn default() -> Self {
         let home = dirs_next::home_dir()
             .unwrap_or_else(|| PathBuf::from("."));
-        let base = home.join(".quictorrent");
+        let base = home.join(".bitturbulence");
         Self {
             download_dir:      base.join("downloads"),
             listen_port:       6881,

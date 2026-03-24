@@ -36,7 +36,7 @@ impl QuicEndpoint {
 
     pub async fn connect(&self, addr: SocketAddr) -> Result<PeerConnection> {
         let conn = self.endpoint
-            .connect(addr, "quictorrent")?
+            .connect(addr, "bitturbulence")?
             .await?;
 
         info!("Connected to peer {}", addr);

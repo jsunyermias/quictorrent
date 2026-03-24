@@ -1,4 +1,4 @@
-# quictorrent
+# bitturbulence
 
 Implementación experimental del protocolo BitTurbulence: transferencia de archivos P2P sobre QUIC, escrita en Rust. Inspirada en BitTorrent.
 
@@ -10,7 +10,7 @@ Implementación experimental del protocolo BitTurbulence: transferencia de archi
 - **Sin compartición de piezas entre archivos** — cada archivo tiene su propio espacio de piezas independiente
 - **Descarga paralela** — múltiples streams QUIC por conexión, un bloque (16 KB) por stream; `BlockScheduler` rarest-first coordina hasta 4 streams simultáneos por peer
 - **9 niveles de prioridad** — por archivo (Minimum → Maximum)
-- **Verificación SHA-256** — integridad garantizada por pieza
+- **Verificación Merkle** — árbol de tres niveles (bloque → pieza → archivo), igual que BitTorrent v2
 - **DHT Kademlia 256-bit** — descubrimiento de peers sin tracker central
 - **Tracker QUIC propio** — announce/scrape sobre QUIC, con persistencia SQLite y TTL
 - **Autenticación configurable** — None, Credentials, Token, mTLS (certificados X.509)
@@ -48,8 +48,8 @@ Implementación experimental del protocolo BitTurbulence: transferencia de archi
 
 ## Compilar
 ```bash
-git clone https://github.com/jsunyermias/quictorrent.git
-cd quictorrent
+git clone https://github.com/jsunyermias/bitturbulence.git
+cd bitturbulence
 cargo build --release
 ```
 
@@ -67,10 +67,10 @@ cargo build --release
   /path/to/output.mkv
 
 # CLI completo
-quictorrent torrent add file.turbulence
-quictorrent torrent start <id>
-quictorrent status
-quictorrent serve
+bitturbulence torrent add file.turbulence
+bitturbulence torrent start <id>
+bitturbulence status
+bitturbulence serve
 ```
 
 ## Tests
@@ -78,7 +78,7 @@ quictorrent serve
 cargo test --workspace
 ```
 
-129 tests, 0 fallos.
+108 tests, 0 fallos.
 
 ## Estado del proyecto
 

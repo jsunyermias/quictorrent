@@ -4,10 +4,10 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
 use crate::error::{Result, TransportError};
 
-/// ALPN protocol id para quictorrent.
+/// ALPN protocol id para bitturbulence.
 /// Identifica el protocolo en el handshake TLS — los peers que no hablen
 /// este protocolo serán rechazados automáticamente.
-pub const ALPN_QUICTORRENT: &[u8] = b"quictorrent/1";
+pub const ALPN_BITTURBULENCE: &[u8] = b"bitturbulence/1";
 
 /// Genera un certificado TLS self-signed para un peer.
 ///
@@ -16,7 +16,7 @@ pub const ALPN_QUICTORRENT: &[u8] = b"quictorrent/1";
 /// canal cifrado; la autenticación real es a nivel de protocolo BT
 /// (handshake con peer_id e info_hash).
 pub fn generate_self_signed_cert() -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>)> {
-    let cert = rcgen::generate_simple_self_signed(vec!["quictorrent".into()])
+    let cert = rcgen::generate_simple_self_signed(vec!["bitturbulence".into()])
         .map_err(|e| TransportError::CertGen(e.to_string()))?;
 
     let cert_der = CertificateDer::from(cert.cert.der().to_vec());
@@ -36,7 +36,7 @@ pub fn server_config() -> Result<ServerConfig> {
         .with_single_cert(vec![cert], key)
         .map_err(|e| TransportError::Tls(e.to_string()))?;
 
-    tls.alpn_protocols = vec![ALPN_QUICTORRENT.to_vec()];
+    tls.alpn_protocols = vec![ALPN_BITTURBULENCE.to_vec()];
 
     let transport = default_transport_config();
     let mut cfg = ServerConfig::with_crypto(Arc::new(
@@ -55,7 +55,7 @@ pub fn client_config() -> Result<ClientConfig> {
         .with_custom_certificate_verifier(Arc::new(SkipServerVerification))
         .with_no_client_auth();
 
-    tls.alpn_protocols = vec![ALPN_QUICTORRENT.to_vec()];
+    tls.alpn_protocols = vec![ALPN_BITTURBULENCE.to_vec()];
 
     let transport = default_transport_config();
     let mut cfg = ClientConfig::new(Arc::new(
