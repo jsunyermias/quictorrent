@@ -856,7 +856,7 @@ pub async fn run_daemon(config: &Config, state_path: &Path) -> Result<()> {
     let mut torrents: HashMap<[u8; 32], Arc<TorrentCtx>> = HashMap::new();
     let mut torrent_ids: Vec<(String, Arc<TorrentCtx>)>  = Vec::new();
 
-    for entry in state.torrents.values() {
+    for entry in state.flows.values() {
         let active = matches!(entry.state, DownloadState::Downloading | DownloadState::Seeding);
         if !active { continue; }
 

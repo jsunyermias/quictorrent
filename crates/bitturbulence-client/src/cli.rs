@@ -19,10 +19,10 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Gestión de torrents.
-    Torrent {
+    /// Gestión de BitFlows.
+    Flow {
         #[command(subcommand)]
-        action: TorrentAction,
+        action: FlowAction,
     },
     /// Muestra el estado de todas las descargas.
     Status,
@@ -31,8 +31,8 @@ pub enum Commands {
 }
 
 #[derive(Subcommand)]
-pub enum TorrentAction {
-    /// Añade un torrent a la cola.
+pub enum FlowAction {
+    /// Añade un BitFlow a la cola.
     Add {
         /// Fichero .bitflow (BitFlow metainfo JSON).
         path: PathBuf,
@@ -43,20 +43,20 @@ pub enum TorrentAction {
         #[arg(short, long, default_value = "4")]
         priority: u8,
     },
-    /// Inicia o reanuda la descarga de un torrent.
+    /// Inicia o reanuda la descarga de un BitFlow.
     Start {
-        /// ID del torrent (primeros 8 chars del info_hash).
+        /// ID del BitFlow (primeros 8 chars del info_hash).
         id: String,
     },
-    /// Pausa la descarga de un torrent.
+    /// Pausa la descarga de un BitFlow.
     Pause {
         id: String,
     },
-    /// Elimina un torrent de la lista.
+    /// Elimina un BitFlow de la lista.
     Stop {
         id: String,
     },
-    /// Muestra los peers conectados a un torrent.
+    /// Muestra los peers conectados a un BitFlow.
     Peers {
         id: String,
     },

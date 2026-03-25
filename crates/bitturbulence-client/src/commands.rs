@@ -7,9 +7,9 @@ use bitturbulence_tracker::server::{ServerConfig, TrackerServer};
 use bitturbulence_tracker::PeerStore;
 
 use crate::config::Config;
-use crate::state::{ClientState, DownloadState, TorrentEntry};
+use crate::state::{ClientState, DownloadState, FlowEntry};
 
-/// Añade un torrent al cliente.
+/// Añade un BitFlow al cliente.
 pub async fn cmd_add(
     meta_path: &Path,
     save_path: Option<PathBuf>,
@@ -32,21 +32,21 @@ pub async fn cmd_add(
     let mut state = ClientState::load(state_path)?;
 
     if state.get(&id).is_some() {
-        println!("torrent {} already added", id);
+        println!("flow {} already added", id);
         return Ok(());
     }
 
     // Guardar copia del .bitflow en el directorio de configuración.
     let torrents_dir = config.state_file.parent()
         .unwrap_or(Path::new("."))
-        .join("torrents");
+        .join("flows");
     std::fs::create_dir_all(&torrents_dir)?;
     let meta_dest = torrents_dir.join(format!("{}.bitflow", id));
     std::fs::copy(meta_path, &meta_dest)
         .with_context(|| format!("copying metainfo to {:?}", meta_dest))?;
 
     let total_size = meta.total_size();
-    let entry = TorrentEntry {
+    let entry = FlowEntry {
         id:             id.clone(),
         info_hash:      info_hash_hex,
         name:           meta.name.clone(),
@@ -61,18 +61,18 @@ pub async fn cmd_add(
     state.add(entry);
     state.save(state_path)?;
 
-    println!("added torrent [{}] {} ({} bytes, {} files)",
+    println!("added flow [{}] {} ({} bytes, {} files)",
         id, meta.name, total_size, meta.files.len());
 
     Ok(())
 }
 
-/// Muestra el estado de todos los torrents.
+/// Muestra el estado de todos los BitFlows.
 pub fn cmd_status(state_path: &Path) -> Result<()> {
     let state = ClientState::load(state_path)?;
 
-    if state.torrents.is_empty() {
-        println!("no torrents");
+    if state.flows.is_empty() {
+        println!("no flows");
         return Ok(());
     }
 
@@ -80,7 +80,7 @@ pub fn cmd_status(state_path: &Path) -> Result<()> {
         "ID", "NAME", "SIZE", "PROG%", "PEERS");
     println!("{}", "-".repeat(72));
 
-    let mut entries: Vec<_> = state.torrents.values().collect();
+    let mut entries: Vec<_> = state.flows.values().collect();
     entries.sort_by(|a, b| a.id.cmp(&b.id));
 
     for e in entries {
@@ -98,11 +98,11 @@ pub fn cmd_status(state_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Inicia la descarga de un torrent.
+/// Inicia la descarga de un BitFlow.
 pub fn cmd_start(id: &str, state_path: &Path) -> Result<()> {
     let mut state = ClientState::load(state_path)?;
     let entry = state.get_mut(id)
-        .ok_or_else(|| anyhow!("torrent '{}' not found", id))?;
+        .ok_or_else(|| anyhow!("flow '{}' not found", id))?;
 
     match &entry.state {
         DownloadState::Seeding => {
@@ -121,11 +121,11 @@ pub fn cmd_start(id: &str, state_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Pausa la descarga de un torrent.
+/// Pausa la descarga de un BitFlow.
 pub fn cmd_pause(id: &str, state_path: &Path) -> Result<()> {
     let mut state = ClientState::load(state_path)?;
     let entry = state.get_mut(id)
-        .ok_or_else(|| anyhow!("torrent '{}' not found", id))?;
+        .ok_or_else(|| anyhow!("flow '{}' not found", id))?;
 
     entry.state = DownloadState::Paused;
     println!("[{}] {} → paused", id, entry.name);
@@ -133,26 +133,26 @@ pub fn cmd_pause(id: &str, state_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Detiene y elimina un torrent de la lista.
+/// Detiene y elimina un BitFlow de la lista.
 pub fn cmd_stop(id: &str, state_path: &Path) -> Result<()> {
     let mut state = ClientState::load(state_path)?;
     let name = state.get(id)
         .ok_or_else(|| anyhow!("torrent '{}' not found", id))?
         .name.clone();
 
-    state.torrents.retain(|k, v| k != id && !v.info_hash.starts_with(id));
+    state.flows.retain(|k, v| k != id && !v.info_hash.starts_with(id));
     state.save(state_path)?;
     println!("[{}] {} removed", id, name);
     Ok(())
 }
 
-/// Muestra los peers de un torrent.
+/// Muestra los peers de un BitFlow.
 pub fn cmd_peers(id: &str, state_path: &Path) -> Result<()> {
     let state = ClientState::load(state_path)?;
     let entry = state.get(id)
-        .ok_or_else(|| anyhow!("torrent '{}' not found", id))?;
+        .ok_or_else(|| anyhow!("flow '{}' not found", id))?;
 
-    println!("torrent [{}] {} — {} peer(s) connected",
+    println!("flow [{}] {} — {} peer(s) connected",
         entry.id, entry.name, entry.peers);
 
     // En producción aquí haríamos IPC con el daemon para obtener la lista real.

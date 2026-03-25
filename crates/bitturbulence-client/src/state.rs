@@ -26,14 +26,14 @@ impl std::fmt::Display for DownloadState {
     }
 }
 
-/// Entrada en la lista de torrents gestionados.
+/// Entrada en la lista de BitFlows gestionados.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TorrentEntry {
+pub struct FlowEntry {
     /// ID corto (primeros 8 hex del info_hash).
     pub id:          String,
     /// Info hash completo (64 hex).
     pub info_hash:   String,
-    /// Nombre del torrent.
+    /// Nombre del BitFlow.
     pub name:        String,
     /// Directorio de descarga.
     pub save_path:       PathBuf,
@@ -50,7 +50,7 @@ pub struct TorrentEntry {
     pub peers:       usize,
 }
 
-impl TorrentEntry {
+impl FlowEntry {
     pub fn progress(&self) -> f32 {
         if self.total_size == 0 { return 0.0; }
         self.downloaded as f32 / self.total_size as f32 * 100.0
@@ -60,7 +60,7 @@ impl TorrentEntry {
 /// Estado persistente del cliente.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ClientState {
-    pub torrents: HashMap<String, TorrentEntry>,
+    pub flows: HashMap<String, FlowEntry>,
 }
 
 impl ClientState {
@@ -81,23 +81,22 @@ impl ClientState {
         Ok(())
     }
 
-    pub fn add(&mut self, entry: TorrentEntry) {
-        self.torrents.insert(entry.id.clone(), entry);
+    pub fn add(&mut self, entry: FlowEntry) {
+        self.flows.insert(entry.id.clone(), entry);
     }
 
-    pub fn get(&self, id: &str) -> Option<&TorrentEntry> {
-        // Buscar por ID corto o por prefijo del info_hash
-        self.torrents.get(id)
-            .or_else(|| self.torrents.values().find(|e| e.info_hash.starts_with(id)))
+    pub fn get(&self, id: &str) -> Option<&FlowEntry> {
+        self.flows.get(id)
+            .or_else(|| self.flows.values().find(|e| e.info_hash.starts_with(id)))
     }
 
-    pub fn get_mut(&mut self, id: &str) -> Option<&mut TorrentEntry> {
-        if self.torrents.contains_key(id) {
-            return self.torrents.get_mut(id);
+    pub fn get_mut(&mut self, id: &str) -> Option<&mut FlowEntry> {
+        if self.flows.contains_key(id) {
+            return self.flows.get_mut(id);
         }
-        let key = self.torrents.keys()
-            .find(|k| self.torrents[*k].info_hash.starts_with(id))
+        let key = self.flows.keys()
+            .find(|k| self.flows[*k].info_hash.starts_with(id))
             .cloned();
-        key.and_then(|k| self.torrents.get_mut(&k))
+        key.and_then(|k| self.flows.get_mut(&k))
     }
 }

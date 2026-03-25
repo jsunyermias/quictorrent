@@ -9,7 +9,7 @@ use anyhow::Result;
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
-use cli::{Cli, Commands, TorrentAction};
+use cli::{Cli, Commands, FlowAction};
 use config::Config;
 use bitturbulence_protocol::Priority;
 
@@ -45,22 +45,22 @@ async fn main() -> Result<()> {
             commands::cmd_serve(&config, &state_path).await?;
         }
 
-        Commands::Torrent { action } => match action {
-            TorrentAction::Add { path, save, priority } => {
+        Commands::Flow { action } => match action {
+            FlowAction::Add { path, save, priority } => {
                 let prio = Priority::from_u8(priority)
                     .unwrap_or(Priority::Normal);
                 commands::cmd_add(&path, save, prio, &state_path, &config).await?;
             }
-            TorrentAction::Start { id } => {
+            FlowAction::Start { id } => {
                 commands::cmd_start(&id, &state_path)?;
             }
-            TorrentAction::Pause { id } => {
+            FlowAction::Pause { id } => {
                 commands::cmd_pause(&id, &state_path)?;
             }
-            TorrentAction::Stop { id } => {
+            FlowAction::Stop { id } => {
                 commands::cmd_stop(&id, &state_path)?;
             }
-            TorrentAction::Peers { id } => {
+            FlowAction::Peers { id } => {
                 commands::cmd_peers(&id, &state_path)?;
             }
         },
