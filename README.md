@@ -17,29 +17,29 @@ Implementación experimental del protocolo BitTurbulence: transferencia de archi
 
 ## Arquitectura
 ```
-┌─────────────────────────────────────────────┐
-│                  qt-client                   │
-│         CLI: qt torrent add/start/...        │
-└──────┬──────────┬──────────┬────────────────┘
+┌──────────────────────────────────────────────────────┐
+│              bitturbulence-client (submarine)         │
+│      CLI: submarine torrent add/start/...            │
+└──────┬──────────┬──────────┬───────────────────────┘
        │          │          │
-  qt-peer    qt-tracker   qt-dht
+  bitturbulence-peer  bitturbulence-tracker  bitturbulence-dht
        │          │          │
-  qt-pieces  qt-transport (QUIC/quinn)
+  bitturbulence-pieces  bitturbulence-transport (QUIC/quinn)
        │          │
-  qt-protocol (mensajes wire, metainfo, auth)
+  bitturbulence-protocol (mensajes wire, metainfo, auth)
 ```
 
 ### Crates
 
 | Crate | Descripción |
 |---|---|
-| `qt-protocol` | Mensajes wire, metainfo, info hash SHA-256, prioridades, autenticación |
-| `qt-transport` | Endpoint QUIC con quinn, TLS self-signed, streams tipados |
-| `qt-peer` | Sesión P2P: Hello/HelloAck, estado de disponibilidad, requests |
-| `qt-pieces` | Almacenamiento en disco, `BlockScheduler` rarest-first por bloque, verificación SHA-256 |
-| `qt-tracker` | Tracker QUIC: announce/scrape, persistencia SQLite, TTL |
-| `qt-dht` | DHT Kademlia 256-bit: routing table, store con TTL, persistencia JSON |
-| `qt-client` | Binario CLI `qt` y herramientas de prueba `seed`/`download` |
+| `bitturbulence-protocol` | Mensajes wire, metainfo BitFlow, info hash, prioridades, autenticación |
+| `bitturbulence-transport` | Endpoint QUIC con quinn, TLS self-signed, streams tipados |
+| `bitturbulence-peer` | Sesión P2P: Hello/HelloAck, estado de disponibilidad, requests |
+| `bitturbulence-pieces` | Almacenamiento en disco, `BlockScheduler` rarest-first, verificación Merkle |
+| `bitturbulence-tracker` | Tracker QUIC: announce/scrape, persistencia SQLite, TTL |
+| `bitturbulence-dht` | DHT Kademlia 256-bit: routing table, store con TTL, persistencia JSON |
+| `bitturbulence-client` | Binario CLI `submarine` y herramientas `seed`/`download` |
 
 ## Requisitos
 
@@ -67,10 +67,10 @@ cargo build --release
   /path/to/output.mkv
 
 # CLI completo
-bitturbulence torrent add file.turbulence
-bitturbulence torrent start <id>
-bitturbulence status
-bitturbulence serve
+submarine torrent add file.bitflow
+submarine torrent start <id>
+submarine status
+submarine serve
 ```
 
 ## Tests

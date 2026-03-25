@@ -3,13 +3,13 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
-    name = "bt",
-    about = "bitturbulence — BitTorrent over QUIC",
+    name = "submarine",
+    about = "Submarine — cliente BitTurbulence",
     version,
     propagate_version = true,
 )]
 pub struct Cli {
-    /// Fichero de configuración (por defecto ~/.bitturbulence/config.json).
+    /// Fichero de configuración (por defecto ~/.submarine/config.json).
     #[arg(long, global = true)]
     pub config: Option<PathBuf>,
 
@@ -34,7 +34,7 @@ pub enum Commands {
 pub enum TorrentAction {
     /// Añade un torrent a la cola.
     Add {
-        /// Fichero .turbulence (metainfo JSON).
+        /// Fichero .bitflow (BitFlow metainfo JSON).
         path: PathBuf,
         /// Directorio de descarga (sobreescribe el valor por defecto).
         #[arg(short, long)]

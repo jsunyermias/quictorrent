@@ -37,7 +37,7 @@ pub struct TorrentEntry {
     pub name:        String,
     /// Directorio de descarga.
     pub save_path:       PathBuf,
-    /// Ruta al .turbulence (metainfo completo). Vacía si se añadió antes de esta versión.
+    /// Ruta al .bitflow (BitFlow metainfo). Vacía si se añadió antes de esta versión.
     #[serde(default)]
     pub metainfo_path:   PathBuf,
     /// Estado actual.
