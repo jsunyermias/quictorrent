@@ -1,0 +1,15 @@
+[package]
+name = "bitturbulence-pieces"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bitturbulence-protocol = { path = "../bitturbulence-protocol" }
+tokio       = { workspace = true }
+bytes       = { workspace = true }
+thiserror   = { workspace = true }
+tracing     = { workspace = true }
+sha2        = "0.10"
+
+[dev-dependencies]
+tempfile = "3"

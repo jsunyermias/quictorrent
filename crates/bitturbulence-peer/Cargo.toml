@@ -1,0 +1,15 @@
+[package]
+name = "bitturbulence-peer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bitturbulence-protocol  = { path = "../bitturbulence-protocol" }
+bitturbulence-transport = { path = "../bitturbulence-transport" }
+tokio        = { workspace = true }
+bytes        = { workspace = true }
+thiserror    = { workspace = true }
+tracing      = { workspace = true }
+futures-util = { version = "0.3", features = ["sink"] }
+tokio-util   = { version = "0.7", features = ["codec"] }
+quinn = { workspace = true }

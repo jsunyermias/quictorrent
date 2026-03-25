@@ -107,6 +107,126 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
 
 [[package]]
+name = "bitturbulence-client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bitturbulence-dht",
+ "bitturbulence-peer",
+ "bitturbulence-pieces",
+ "bitturbulence-protocol",
+ "bitturbulence-tracker",
+ "bitturbulence-transport",
+ "bytes",
+ "clap",
+ "dirs-next",
+ "futures-util",
+ "hex",
+ "quinn",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "bitturbulence-dht"
+version = "0.1.0"
+dependencies = [
+ "bitturbulence-protocol",
+ "bitturbulence-transport",
+ "bytes",
+ "hex",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "bitturbulence-peer"
+version = "0.1.0"
+dependencies = [
+ "bitturbulence-protocol",
+ "bitturbulence-transport",
+ "bytes",
+ "futures-util",
+ "quinn",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "bitturbulence-pieces"
+version = "0.1.0"
+dependencies = [
+ "bitturbulence-protocol",
+ "bytes",
+ "sha2",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "bitturbulence-protocol"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "serde",
+ "sha2",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "bitturbulence-tracker"
+version = "0.1.0"
+dependencies = [
+ "bitturbulence-protocol",
+ "bitturbulence-transport",
+ "chrono",
+ "hex",
+ "quinn",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "bitturbulence-transport"
+version = "0.1.0"
+dependencies = [
+ "bitturbulence-protocol",
+ "bytes",
+ "futures-util",
+ "quinn",
+ "rcgen",
+ "rustls",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -749,59 +869,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "qt-client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytes",
- "clap",
- "dirs-next",
- "futures-util",
- "hex",
- "qt-dht",
- "qt-peer",
- "qt-pieces",
- "qt-protocol",
- "qt-tracker",
- "qt-transport",
- "quinn",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "qt-dht"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "hex",
- "qt-protocol",
- "qt-transport",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "qt-integration"
 version = "0.1.0"
 dependencies = [
+ "bitturbulence-peer",
+ "bitturbulence-pieces",
+ "bitturbulence-protocol",
+ "bitturbulence-transport",
  "bytes",
  "futures-util",
- "qt-peer",
- "qt-pieces",
- "qt-protocol",
- "qt-transport",
  "quinn",
  "sha2",
  "tempfile",
@@ -809,82 +885,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "qt-peer"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "futures-util",
- "qt-protocol",
- "qt-transport",
- "quinn",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "qt-pieces"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "qt-protocol",
- "sha2",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "qt-protocol"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "serde",
- "sha2",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
-name = "qt-tracker"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "hex",
- "qt-protocol",
- "qt-transport",
- "quinn",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "qt-transport"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "futures-util",
- "qt-protocol",
- "quinn",
- "rcgen",
- "rustls",
- "thiserror 1.0.69",
- "tokio",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]

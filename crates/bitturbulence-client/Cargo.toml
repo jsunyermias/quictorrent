@@ -1,0 +1,38 @@
+[package]
+name = "bitturbulence-client"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "bitturbulence"
+path = "src/main.rs"
+
+[[bin]]
+name = "seed"
+path = "src/bin/seed.rs"
+
+[[bin]]
+name = "download"
+path = "src/bin/download.rs"
+
+[dependencies]
+bitturbulence-protocol  = { path = "../bitturbulence-protocol" }
+bitturbulence-transport = { path = "../bitturbulence-transport" }
+bitturbulence-peer      = { path = "../bitturbulence-peer" }
+bitturbulence-pieces    = { path = "../bitturbulence-pieces" }
+bitturbulence-tracker   = { path = "../bitturbulence-tracker" }
+bitturbulence-dht       = { path = "../bitturbulence-dht" }
+tokio        = { workspace = true }
+tracing      = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap         = { version = "4", features = ["derive"] }
+serde        = { version = "1", features = ["derive"] }
+serde_json   = "1"
+anyhow       = "1"
+hex          = "0.4"
+bytes        = { workspace = true }
+futures-util = { version = "0.3", features = ["sink"] }
+tokio-util   = { version = "0.7", features = ["codec"] }
+dirs-next    = "2"
+rand         = "0.8"
+quinn        = { workspace = true }

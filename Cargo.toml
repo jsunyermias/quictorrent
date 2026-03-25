@@ -1,12 +1,12 @@
 [workspace]
 members = [
-    "crates/qt-protocol",
-    "crates/qt-transport",
-    "crates/qt-peer",
-    "crates/qt-pieces",
-    "crates/qt-tracker",
-    "crates/qt-dht",
-    "crates/qt-client",
+    "crates/bitturbulence-protocol",
+    "crates/bitturbulence-transport",
+    "crates/bitturbulence-peer",
+    "crates/bitturbulence-pieces",
+    "crates/bitturbulence-tracker",
+    "crates/bitturbulence-dht",
+    "crates/bitturbulence-client",
     "integration",
 ]
 resolver = "2"

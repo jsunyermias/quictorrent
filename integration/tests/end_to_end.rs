@@ -3,9 +3,9 @@ use bytes::Bytes;
 use sha2::{Digest, Sha256};
 use tempfile::tempdir;
 
-use qt_pieces::{hash_piece, verify_piece, PieceStore};
-use qt_protocol::{AuthPayload, Message, MessageCodec, PROTOCOL_VERSION};
-use qt_transport::QuicEndpoint;
+use bitturbulence_pieces::{hash_piece, verify_piece, PieceStore};
+use bitturbulence_protocol::{AuthPayload, Message, MessageCodec, PROTOCOL_VERSION};
+use bitturbulence_transport::QuicEndpoint;
 use tokio_util::codec::{FramedRead, FramedWrite};
 use futures_util::{SinkExt, StreamExt};
 

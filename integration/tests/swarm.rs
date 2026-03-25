@@ -36,12 +36,12 @@ use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
-use qt_pieces::{BlockScheduler, BlockTask, TorrentStore, hash_block, piece_root, file_root, verify_piece};
-use qt_protocol::{
+use bitturbulence_pieces::{BlockScheduler, BlockTask, TorrentStore, hash_block, piece_root, file_root, verify_piece};
+use bitturbulence_protocol::{
     AuthPayload, FileEntry, Message, MessageCodec, Metainfo, Priority,
     BLOCK_SIZE, PROTOCOL_VERSION,
 };
-use qt_transport::{PeerConnection, QuicEndpoint};
+use bitturbulence_transport::{PeerConnection, QuicEndpoint};
 
 // ── Parámetros del test ───────────────────────────────────────────────────────
 
