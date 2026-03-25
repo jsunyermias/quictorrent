@@ -82,7 +82,7 @@ cargo test --workspace
 
 ## Estado del proyecto
 
-Experimental. Transferencia P2P real verificada en red local (hasta 3 GB, SHA-256 correcto). Descarga paralela implementada y verificada con swarm de 8 peers.
+Experimental. Transferencia P2P real verificada en red local (hasta 3 GB, SHA-256 correcto). Descarga paralela implementada y verificada con current de 8 peers.
 
 **No listo para producción.** Faltan: NAT traversal, limitación de velocidad, reanudación de descargas.
 

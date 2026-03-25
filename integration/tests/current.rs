@@ -1,4 +1,4 @@
-//! Test de swarm P2P con 8 peers y distribución de piezas heterogénea.
+//! Test de current P2P con 8 peers y distribución de piezas heterogénea.
 //!
 //! Simula las proporciones de un archivo de 10 GB con 8 peers:
 //!
@@ -13,10 +13,10 @@
 //!
 //! # Arquitectura del test
 //!
-//! Para cada par (downloader → seeder):
+//! Para cada par (downloader → filler):
 //! - Se abre una conexión QUIC
 //! - El downloader abre streams bidi, uno por bloque pendiente
-//! - El seeder acepta streams y sirve bloques desde su store
+//! - El filler acepta streams y sirve bloques desde su store
 //! - Un `BlockScheduler` compartido coordina qué bloques pide cada stream
 //!
 //! La topología de conexiones es:
@@ -54,7 +54,7 @@ const PIECE_LEN: u32 = 64 * 1024;
 /// Tamaño total del archivo simulado (16 MB).
 const FILE_SIZE: u64 = NUM_PIECES as u64 * PIECE_LEN as u64;
 
-/// Número de peers en el swarm.
+/// Número de peers en el current.
 const NUM_PEERS: usize = 8;
 
 /// Streams de datos simultáneos por conexión (como en daemon.rs).
@@ -158,7 +158,7 @@ async fn init_peer(
     let store = TorrentStore::open(dir.path(), meta).await.unwrap();
 
     let initial = initial_pieces(peer_idx);
-    let is_seeder = initial == NUM_PIECES;
+    let is_filler = initial == NUM_PIECES;
 
     let piece_len  = meta.files[0].piece_length();
     let last_piece = meta.files[0].last_piece_length();
@@ -180,8 +180,8 @@ async fn init_peer(
         have[pi] = true;
     }
 
-    if is_seeder {
-        // Seeder puro: el scheduler está completo desde el inicio
+    if is_filler {
+        // Filler puro: el scheduler está completo desde el inicio
         assert!(sched.is_complete());
     }
 
@@ -196,7 +196,7 @@ async fn init_peer(
     })
 }
 
-// ── Tarea seeder (acepta un stream y sirve bloques) ───────────────────────────
+// ── Tarea filler (acepta un stream y sirve bloques) ───────────────────────────
 
 async fn handle_seeder_stream(
     conn_send: quinn::SendStream,
@@ -300,7 +300,7 @@ async fn accept_loop(endpoint: Arc<QuicEndpoint>, state: Arc<PeerState>) {
     }
 }
 
-// ── Descarga desde un seeder ───────────────────────────────────────────────────
+// ── Descarga desde un filler ───────────────────────────────────────────────────
 
 async fn download_from_peer(
     conn:     PeerConnection,
@@ -329,10 +329,10 @@ async fn download_from_peer(
     drop(hello_w);
     drop(hello_r);
 
-    // Stream de control: recibir disponibilidad del seeder
+    // Stream de control: recibir disponibilidad del filler
     let Ok((mut ctrl_w, mut ctrl_r)) = conn.open_bidi_stream().await else { return };
 
-    // Anunciar nuestra disponibilidad al seeder
+    // Anunciar nuestra disponibilidad al filler
     let our_bits = state.our_bitfield().await;
     let msg = if our_bits.iter().all(|&h| !h) {
         Message::HaveNone { file_index: 0 }
@@ -348,11 +348,11 @@ async fn download_from_peer(
     };
     let _ = ctrl_w.send(msg).await;
 
-    // Leer disponibilidad del seeder
+    // Leer disponibilidad del filler
     let seeder_bits: Vec<bool> = loop {
         match ctrl_r.next().await {
             Some(Ok(Message::HaveAll { .. })) => break vec![true; NUM_PIECES],
-            Some(Ok(Message::HaveNone { .. })) => return, // seeder no tiene nada
+            Some(Ok(Message::HaveNone { .. })) => return, // filler no tiene nada
             Some(Ok(Message::HaveBitmap { bitmap, .. })) => {
                 let bits: Vec<bool> = (0..NUM_PIECES)
                     .map(|i| bitmap.get(i / 8).is_some_and(|b| (b >> (7 - (i % 8))) & 1 == 1))
@@ -364,7 +364,7 @@ async fn download_from_peer(
         }
     };
 
-    // Registrar disponibilidad del seeder en el scheduler
+    // Registrar disponibilidad del filler en el scheduler
     state.scheduler.lock().await.add_peer_bitfield(&seeder_bits);
 
     // Abrir streams de datos en paralelo
@@ -425,7 +425,7 @@ async fn download_from_peer(
         }
 
         if active_streams == 0 {
-            // No hay streams activos ni pendientes para este seeder
+            // No hay streams activos ni pendientes para este filler
             break 'outer;
         }
 
@@ -443,14 +443,14 @@ async fn download_from_peer(
         }
     }
 
-    // Quitar aportación del seeder al scheduler
+    // Quitar aportación del filler al scheduler
     state.scheduler.lock().await.remove_peer_bitfield(&seeder_bits);
 }
 
 // ── Test principal ────────────────────────────────────────────────────────────
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn swarm_8_peers_mixed_availability() {
+async fn current_8_peers_mixed_availability() {
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::WARN)
         .try_init();
@@ -459,7 +459,7 @@ async fn swarm_8_peers_mixed_availability() {
     let (pieces, hashes, info_hash) = generate_pieces();
 
     let meta = Metainfo {
-        name:      "swarm-test".into(),
+        name:      "current-test".into(),
         info_hash,
         files: vec![
             FileEntry {
@@ -500,14 +500,14 @@ async fn swarm_8_peers_mixed_availability() {
     // Pequeña pausa para que los accept loops estén listos
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    // ── Conectar downloaders a seeders ─────────────────────────────────────
+    // ── Conectar drainers a fillers ─────────────────────────────────────
     //
     // Topología:
     // - Peer 1 (50%) → Peer 0 (100%)
     // - Peer 2 (30%) → Peer 0 (100%)
     // - Peers 3–7 (0%) → Peers 0, 1, 2 (en paralelo)
     //
-    // Esto ejercita rarest-first: los 5 leechers ven la misma disponibilidad
+    // Esto ejercita rarest-first: los 5 drainers ven la misma disponibilidad
     // y priorizan piezas raras (las que solo Peer 2 tiene, etc.).
 
     let mut download_tasks = vec![];
@@ -522,18 +522,18 @@ async fn swarm_8_peers_mixed_availability() {
         m
     };
 
-    for (&downloader, seeders) in &sources {
-        for &seeder in seeders {
+    for (&downloader, fillers) in &sources {
+        for &filler in fillers {
             let state  = states[downloader].clone();
             let ep     = endpoints[downloader].clone();
-            let addr   = addrs[seeder];
+            let addr   = addrs[filler];
             let mut peer_id = [0u8; 32];
             peer_id[0] = downloader as u8;
 
             let task = tokio::spawn(async move {
                 match ep.connect(addr).await {
                     Ok(conn) => download_from_peer(conn, state, peer_id).await,
-                    Err(e)   => eprintln!("connect {downloader}→{seeder}: {e:?}"),
+                    Err(e)   => eprintln!("connect {downloader}→{filler}: {e:?}"),
                 }
             });
             download_tasks.push(task);

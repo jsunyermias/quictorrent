@@ -1,4 +1,4 @@
-//! Descargador mínimo: descarga un archivo de un seeder.
+//! Descargador mínimo: descarga un archivo de un filler.
 //! Uso: cargo run --bin download -- <ip:puerto> <info_hash_hex> <num_pieces> <piece_length> <output>
 
 use std::io::SeekFrom;
@@ -69,7 +69,7 @@ async fn main() -> anyhow::Result<()> {
     loop {
         match reader.next().await.unwrap()? {
             Message::KeepAlive => continue,
-            Message::HaveAll { .. } => { println!("seeder tiene todo"); break; }
+            Message::HaveAll { .. } => { println!("filler tiene todo"); break; }
             m => println!("ignorando: {:?}", m),
         }
     }

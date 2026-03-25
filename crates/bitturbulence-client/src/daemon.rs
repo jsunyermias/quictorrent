@@ -208,7 +208,7 @@ fn bytes_to_bitfield(bytes: &[u8], num: usize) -> Vec<bool> {
 enum StreamResult {
     /// Bloque descargado y escrito en disco. `hash` = SHA-256(block_data).
     BlockOk   { stream_id: usize, fi: usize, pi: u32, bi: u32, hash: [u8; 32] },
-    /// Bloque fallido (Reject del seeder o error de red).
+    /// Bloque fallido (Reject del filler o error de red).
     BlockFail { stream_id: usize, fi: usize, pi: u32, bi: u32 },
     /// Stream muerto por error QUIC irrecuperable.
     StreamDead { stream_id: usize },
@@ -269,7 +269,7 @@ async fn download_stream_worker(
                 Some(Ok(Message::Reject { file_index, piece_index, begin: b, .. }))
                     if file_index as usize == fi && piece_index == pi && b == begin =>
                 {
-                    debug!(fi, pi, bi, "block rejected by seeder");
+                    debug!(fi, pi, bi, "block rejected by filler");
                     break StreamResult::BlockFail { stream_id, fi, pi, bi };
                 }
                 // Stream cerrado o error
@@ -285,7 +285,7 @@ async fn download_stream_worker(
     }
 }
 
-// ── Seeder: sirve blocks sobre un data stream ─────────────────────────────────
+// ── Filler: sirve blocks sobre un data stream ─────────────────────────────────
 
 /// Procesa `Request`s del downloader sobre un stream de datos dedicado
 /// y responde con `Piece` o `Reject` bloque a bloque.
@@ -600,7 +600,7 @@ async fn run_peer_downloader(
     }
 }
 
-// ── Bucle del seeder (conexión entrante) ──────────────────────────────────────
+// ── Bucle del filler (conexión entrante) ──────────────────────────────────────
 
 async fn run_peer_seeder(
     conn:      &PeerConnection,

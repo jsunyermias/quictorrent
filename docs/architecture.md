@@ -77,7 +77,7 @@ DHT Kademlia 256-bit para descubrimiento de peers sin tracker central.
 Binario CLI `qt` y herramientas de prueba `seed`/`download`.
 
 - `seed` — semilla un archivo: calcula metainfo y sirve piezas vía QUIC
-- `download` — descarga desde un seeder: escribe cada pieza a disco
+- `download` — descarga desde un filler: escribe cada pieza a disco
   en cuanto llega (E/S asíncrona con `tokio::fs`), sin buffering en RAM
 
 ## Formato de transferencia
@@ -92,7 +92,7 @@ El `info_hash` es SHA-256 de la concatenación de los hashes SHA-256 de cada pie
 ## Flujo de descarga
 
 ```
-Downloader                          Seeder
+Downloader                          Filler
     |--- KeepAlive ------------------>|   (materializa stream QUIC)
     |--- Hello(info_hash, peer_id) -->|
     |<-- HelloAck(accepted=true) -----|
