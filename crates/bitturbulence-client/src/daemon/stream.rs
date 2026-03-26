@@ -18,7 +18,7 @@ pub(super) type R = FramedRead<RecvStream, MessageCodec>;
 // ── Disponibilidad del peer ───────────────────────────────────────────────────
 
 #[derive(Clone)]
-pub(super) enum PeerAvail {
+pub(crate) enum PeerAvail {
     Unknown,
     HaveAll,
     HaveNone,
@@ -26,7 +26,7 @@ pub(super) enum PeerAvail {
 }
 
 impl PeerAvail {
-    pub(super) fn as_bitfield(&self, num: usize) -> Vec<bool> {
+    pub(crate) fn as_bitfield(&self, num: usize) -> Vec<bool> {
         match self {
             Self::Unknown | Self::HaveNone => vec![false; num],
             Self::HaveAll                  => vec![true;  num],
