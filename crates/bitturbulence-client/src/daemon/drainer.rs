@@ -8,7 +8,7 @@ use tokio::time::interval;
 use tracing::{debug, info};
 
 use bitturbulence_pieces::BlockTask;
-use bitturbulence_protocol::{Message, Priority};
+use bitturbulence_protocol::Message;
 use bitturbulence_transport::PeerConnection;
 
 use super::context::FlowCtx;
@@ -39,8 +39,7 @@ pub async fn send_our_bitfields(ctx: &FlowCtx, ctrl_w: &mut W) -> Result<()> {
     Ok(())
 }
 
-/// Umbral de "baja disponibilidad": el archivo lo tiene como máximo este número de peers.
-const LOW_AVAIL: u32 = 1;
+// ── Constantes de detección de modo ──────────────────────────────────────────
 
 /// Bloques pendientes totales por debajo de los cuales se activa el modo endgame.
 /// En endgame se escala a MAX_STREAMS y se permite redundancia (InFlight) en el scale-up.
@@ -52,105 +51,6 @@ const INSTABILITY_FAIL_THRESHOLD: u32 = 3;
 
 /// Bloques completados con éxito tras los que se resetea el contador de fallos.
 const INSTABILITY_RESET_WINDOW: u32 = 32;
-
-/// Cuenta los bloques `Pending` en todos los archivos del flow.
-async fn total_pending_blocks(ctx: &FlowCtx) -> u32 {
-    let mut n = 0u32;
-    for sched in &ctx.schedulers {
-        n += sched.lock().await.pending_blocks();
-    }
-    n
-}
-
-/// Passes de prioridad inter-archivo: (prioridad requerida, máx. disponibilidad del archivo).
-/// `None` en el segundo campo significa sin filtro de rareza.
-const PRIORITY_PASSES: &[(Priority, Option<u32>)] = &[
-    (Priority::Maximum, Some(LOW_AVAIL)),   // 1. Máxima + rareza
-    (Priority::VeryHigh, Some(LOW_AVAIL)),  // 2. Muy alta + rareza
-    (Priority::Maximum, None),              // 3. Máxima
-    (Priority::Higher, Some(LOW_AVAIL)),    // 4. Más alta + rareza
-    (Priority::VeryHigh, None),             // 5. Muy alta
-    (Priority::High, Some(LOW_AVAIL)),      // 6. Alta + rareza
-    (Priority::Higher, None),               // 7. Más alta
-    (Priority::High, None),                 // 8. Alta
-];
-
-/// Selecciona el siguiente bloque a descargar para un stream existente.
-///
-/// Orden de selección entre archivos:
-/// 1–8. Bloques `Pending` de archivos con prioridad de usuario alta × rareza.
-///  9.  Bloques `Pending` de archivos con prioridad Normal o inferior.
-/// 10–11. Bloques `InFlight` (redundancia/endgame) de cualquier archivo.
-async fn pick_block(ctx: &FlowCtx, peer_avail: &[PeerAvail]) -> Option<BlockTask> {
-    // Passes 1–8: Pending, priority × rareza del archivo.
-    for &(prio, max_avail) in PRIORITY_PASSES {
-        for (fi, avail) in peer_avail.iter().enumerate() {
-            let mut sched = ctx.schedulers[fi].lock().await;
-            if sched.priority() != prio { continue; }
-            if max_avail.is_some_and(|m| sched.min_availability() > m) { continue; }
-            let bits = avail.as_bitfield(sched.num_pieces());
-            if bits.iter().all(|&h| !h) { continue; }
-            if let Some(task) = sched.schedule_pending(&bits) {
-                return Some(task);
-            }
-        }
-    }
-
-    // Pass 9: Pending de archivos con prioridad Normal o inferior.
-    for (fi, avail) in peer_avail.iter().enumerate() {
-        let mut sched = ctx.schedulers[fi].lock().await;
-        if sched.priority() >= Priority::High { continue; }
-        let bits = avail.as_bitfield(sched.num_pieces());
-        if bits.iter().all(|&h| !h) { continue; }
-        if let Some(task) = sched.schedule_pending(&bits) {
-            return Some(task);
-        }
-    }
-
-    // Passes 10–11: InFlight (redundancia/endgame) de cualquier archivo.
-    // schedule() salta los Pending (ya cubiertos arriba) y devuelve InFlight.
-    for (fi, avail) in peer_avail.iter().enumerate() {
-        let mut sched = ctx.schedulers[fi].lock().await;
-        let bits = avail.as_bitfield(sched.num_pieces());
-        if bits.iter().all(|&h| !h) { continue; }
-        if let Some(task) = sched.schedule(&bits) {
-            return Some(task);
-        }
-    }
-
-    None
-}
-
-/// Selecciona un bloque `Pending` para decidir si abrir un nuevo stream.
-///
-/// Aplica el mismo orden de prioridad inter-archivo que [`pick_block`],
-/// pero nunca devuelve bloques `InFlight`.
-async fn pick_pending_block(ctx: &FlowCtx, peer_avail: &[PeerAvail]) -> Option<BlockTask> {
-    for &(prio, max_avail) in PRIORITY_PASSES {
-        for (fi, avail) in peer_avail.iter().enumerate() {
-            let mut sched = ctx.schedulers[fi].lock().await;
-            if sched.priority() != prio { continue; }
-            if max_avail.is_some_and(|m| sched.min_availability() > m) { continue; }
-            let bits = avail.as_bitfield(sched.num_pieces());
-            if bits.iter().all(|&h| !h) { continue; }
-            if let Some(task) = sched.schedule_pending(&bits) {
-                return Some(task);
-            }
-        }
-    }
-
-    for (fi, avail) in peer_avail.iter().enumerate() {
-        let mut sched = ctx.schedulers[fi].lock().await;
-        if sched.priority() >= Priority::High { continue; }
-        let bits = avail.as_bitfield(sched.num_pieces());
-        if bits.iter().all(|&h| !h) { continue; }
-        if let Some(task) = sched.schedule_pending(&bits) {
-            return Some(task);
-        }
-    }
-
-    None
-}
 
 // ── Bucle del drainer (conexión saliente) ─────────────────────────────────────
 
@@ -214,10 +114,21 @@ pub async fn run_peer_downloader(
 
     // ── Bucle coordinador ──────────────────────────────────────────────
     loop {
+        // ─ Calcular modo de operación ──────────────────────────────────
+        //
+        // Modos (por orden de prioridad):
+        //   Normal   : DEFAULT_STREAMS, solo bloques Pending.
+        //   Endgame  : MAX_STREAMS, también bloques InFlight (redundancia).
+        //   Inestable: igual que endgame (compensa fallos de red).
+        let unstable    = recent_fails >= INSTABILITY_FAIL_THRESHOLD;
+        let endgame     = ctx.sched.total_pending().await <= ENDGAME_THRESHOLD;
+        let endgame_mode = unstable || endgame;
+        let max_active  = if endgame_mode { MAX_STREAMS } else { DEFAULT_STREAMS };
+
         // ─ Asignar bloques a slots idle ────────────────────────────────
         for slot in slots.values_mut() {
             if slot.active_block.is_none() {
-                if let Some(task) = pick_block(ctx, &peer_avail).await {
+                if let Some(task) = ctx.sched.pick_block(&peer_avail, endgame_mode).await {
                     let key = (task.fi, task.pi, task.bi);
                     let _ = slot.task_tx.send(task).await;
                     slot.active_block = Some(key);
@@ -226,24 +137,8 @@ pub async fn run_peer_downloader(
         }
 
         // ─ Scale-up adaptativo ─────────────────────────────────────────
-        //
-        // Modos de operación (por orden de prioridad):
-        //   Normal   : DEFAULT_STREAMS, solo bloques Pending.
-        //   Endgame  : MAX_STREAMS, también bloques InFlight (redundancia
-        //              hasta TYPICAL_STREAMS_PER_BLOCK / MAX_STREAMS_PER_BLOCK).
-        //   Inestable: igual que endgame (más redundancia para compensar fallos).
-        let unstable   = recent_fails >= INSTABILITY_FAIL_THRESHOLD;
-        let endgame    = total_pending_blocks(ctx).await <= ENDGAME_THRESHOLD;
-        let max_active = if unstable || endgame { MAX_STREAMS } else { DEFAULT_STREAMS };
-
         if slots.len() < max_active {
-            let task_opt = if unstable || endgame {
-                // Incluye bloques InFlight(< TYPICAL) y InFlight(< MAX) en la selección.
-                pick_block(ctx, &peer_avail).await
-            } else {
-                pick_pending_block(ctx, &peer_avail).await
-            };
-            if let Some(task) = task_opt {
+            if let Some(task) = ctx.sched.pick_block(&peer_avail, endgame_mode).await {
                 match conn.open_bidi_stream().await {
                     Ok((w, r)) => {
                         let id = next_id;
@@ -265,8 +160,7 @@ pub async fn run_peer_downloader(
                     }
                     Err(e) => {
                         tracing::warn!("open data stream: {e}");
-                        ctx.schedulers[task.fi].lock().await
-                            .mark_block_failed(task.pi, task.bi);
+                        ctx.sched.block_failed(task.fi, task.pi, task.bi).await;
                     }
                 }
             }
@@ -287,43 +181,43 @@ pub async fn run_peer_downloader(
                     Message::HaveAll { file_index: fi } => {
                         let fi = fi as usize;
                         if fi < num_files {
-                            let num = ctx.schedulers[fi].lock().await.num_pieces();
+                            let num = ctx.meta.files[fi].piece_hashes.len();
                             let old = peer_avail[fi].as_bitfield(num);
-                            ctx.schedulers[fi].lock().await.remove_peer_bitfield(&old);
-                            ctx.schedulers[fi].lock().await.add_peer_bitfield(&vec![true; num]);
+                            ctx.sched.remove_peer_bitfield(fi, old).await;
+                            ctx.sched.add_peer_bitfield(fi, vec![true; num]).await;
                             peer_avail[fi] = PeerAvail::HaveAll;
                         }
                     }
                     Message::HaveNone { file_index: fi } => {
                         let fi = fi as usize;
                         if fi < num_files {
-                            let num = ctx.schedulers[fi].lock().await.num_pieces();
+                            let num = ctx.meta.files[fi].piece_hashes.len();
                             let old = peer_avail[fi].as_bitfield(num);
-                            ctx.schedulers[fi].lock().await.remove_peer_bitfield(&old);
+                            ctx.sched.remove_peer_bitfield(fi, old).await;
                             peer_avail[fi] = PeerAvail::HaveNone;
                         }
                     }
                     Message::HaveBitmap { file_index: fi, bitmap } => {
                         let fi = fi as usize;
                         if fi < num_files {
-                            let num      = ctx.schedulers[fi].lock().await.num_pieces();
+                            let num      = ctx.meta.files[fi].piece_hashes.len();
                             let old      = peer_avail[fi].as_bitfield(num);
                             let new_bits = bytes_to_bitfield(&bitmap, num);
-                            ctx.schedulers[fi].lock().await.remove_peer_bitfield(&old);
-                            ctx.schedulers[fi].lock().await.add_peer_bitfield(&new_bits);
+                            ctx.sched.remove_peer_bitfield(fi, old).await;
+                            ctx.sched.add_peer_bitfield(fi, new_bits.clone()).await;
                             peer_avail[fi] = PeerAvail::Bitmap(new_bits);
                         }
                     }
                     Message::HavePiece { file_index: fi, piece_index: pi } => {
                         let fi = fi as usize;
                         if fi < num_files {
-                            ctx.schedulers[fi].lock().await.add_peer_have(pi as usize);
+                            ctx.sched.add_peer_have(fi, pi as usize).await;
                             match &mut peer_avail[fi] {
                                 PeerAvail::Bitmap(v) => {
                                     if (pi as usize) < v.len() { v[pi as usize] = true; }
                                 }
                                 other => {
-                                    let num = ctx.schedulers[fi].lock().await.num_pieces();
+                                    let num = ctx.meta.files[fi].piece_hashes.len();
                                     let mut b = other.as_bitfield(num);
                                     if (pi as usize) < num { b[pi as usize] = true; }
                                     *other = PeerAvail::Bitmap(b);
@@ -345,8 +239,7 @@ pub async fn run_peer_downloader(
                         if let Some(slot) = slots.get_mut(&stream_id) {
                             slot.active_block = None;
                         }
-                        let piece_ready = ctx.schedulers[fi].lock().await
-                            .mark_block_done(pi, bi, hash);
+                        let piece_ready = ctx.sched.block_done(fi, pi, bi, hash).await;
                         if piece_ready {
                             if ctx.verify_and_complete(fi, pi).await {
                                 let _ = ctrl_w.send(Message::HavePiece {
@@ -365,13 +258,13 @@ pub async fn run_peer_downloader(
                         if let Some(slot) = slots.get_mut(&stream_id) {
                             slot.active_block = None;
                         }
-                        ctx.schedulers[fi].lock().await.mark_block_failed(pi, bi);
+                        ctx.sched.block_failed(fi, pi, bi).await;
                         recent_fails += 1;
                     }
                     Some(StreamResult::StreamDead { stream_id }) => {
                         if let Some(slot) = slots.remove(&stream_id) {
                             if let Some((fi, pi, bi)) = slot.active_block {
-                                ctx.schedulers[fi].lock().await.mark_block_failed(pi, bi as u32);
+                                ctx.sched.block_failed(fi, pi, bi).await;
                                 // Un stream muerto es inestabilidad, igual que un BlockFail.
                                 recent_fails += 1;
                             }

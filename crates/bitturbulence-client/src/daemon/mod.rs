@@ -22,6 +22,7 @@
 //! | `state_loop`    | Persistencia periódica del estado                    |
 
 pub(crate) mod context;
+pub(crate) mod scheduler_actor;
 pub(crate) mod stream;
 pub(crate) mod drainer;
 pub(crate) mod filler;
