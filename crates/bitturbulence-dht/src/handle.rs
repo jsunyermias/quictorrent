@@ -60,6 +60,7 @@ impl DhtHandle {
                     for peer in p { peers.insert(peer); }
                     for node in n { self.node.add_node(node.id, node.addr.clone()); }
                 }
+                Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
                 _ => break,
             }
         }
@@ -88,11 +89,12 @@ impl DhtHandle {
                     tokens.insert(addr, token);
                     for node in n { self.node.add_node(node.id, node.addr.clone()); }
                 }
+                Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
                 _ => break,
             }
         }
 
-        let our_addr = format!("0.0.0.0:{port}");
+        let our_addr = format!("{}:{port}", self.local_addr.ip());
         for (addr, token) in tokens {
             let msg = DhtMessage::AnnouncePeer {
                 sender: self.node.local_id,
