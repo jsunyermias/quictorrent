@@ -8,6 +8,7 @@ use bitturbulence_tracker::server::{ServerConfig, TrackerServer};
 use bitturbulence_tracker::PeerStore;
 
 use crate::config::Config;
+use crate::ipc_proto::{IpcRequest, IpcResponse};
 use crate::state::{ClientState, DownloadState, FlowEntry};
 
 /// Añade un BitFlow al cliente.
@@ -69,13 +70,20 @@ pub async fn cmd_add(
 }
 
 /// Muestra el estado de todos los BitFlows.
-pub fn cmd_status(state_path: &Path) -> Result<()> {
+/// Si el daemon está activo, fusiona los datos en tiempo real vía IPC.
+pub async fn cmd_status(state_path: &Path, socket_path: &Path) -> Result<()> {
     let state = ClientState::load(state_path)?;
 
     if state.flows.is_empty() {
         println!("no flows");
         return Ok(());
     }
+
+    // Obtener datos en tiempo real del daemon (si está corriendo).
+    let live = match try_ipc(socket_path, &IpcRequest::Status).await {
+        Some(IpcResponse::Status { flows }) => flows,
+        _ => vec![],
+    };
 
     println!("{:<8}  {:<30}  {:>7}  {:>6}  {:>5}  STATE",
         "ID", "NAME", "SIZE", "PROG%", "PEERS");
@@ -85,14 +93,21 @@ pub fn cmd_status(state_path: &Path) -> Result<()> {
     entries.sort_by(|a, b| a.id.cmp(&b.id));
 
     for e in entries {
-        let size = format_size(e.total_size);
+        // Preferir datos en tiempo real si el daemon está activo.
+        let (downloaded, peers, state_str) = live.iter()
+            .find(|l| l.id == e.id)
+            .map(|l| (l.downloaded, l.peers, l.state.clone()))
+            .unwrap_or((e.downloaded, e.peers, e.state.to_string()));
+
+        let total = if e.total_size > 0 { e.total_size } else { 1 };
+        let pct   = downloaded as f32 / total as f32 * 100.0;
         println!("{:<8}  {:<30}  {:>7}  {:>5.1}%  {:>5}  {}",
             e.id,
             truncate(&e.name, 30),
-            size,
-            e.progress(),
-            e.peers,
-            e.state,
+            format_size(e.total_size),
+            pct,
+            peers,
+            state_str,
         );
     }
 
@@ -100,34 +115,54 @@ pub fn cmd_status(state_path: &Path) -> Result<()> {
 }
 
 /// Inicia la descarga de un BitFlow.
-pub fn cmd_start(id: &str, state_path: &Path) -> Result<()> {
+pub async fn cmd_start(id: &str, state_path: &Path, socket_path: &Path) -> Result<()> {
+    // Si el daemon está activo, la escritura pasa por él (evita carreras con state.json).
+    if let Some(resp) = try_ipc(socket_path, &IpcRequest::FlowStart { id: id.into() }).await {
+        match resp {
+            IpcResponse::Ok => {}
+            IpcResponse::Error { message } => return Err(anyhow!("{}", message)),
+            _ => {}
+        }
+        // Reconfirmar con state.json para el mensaje de feedback.
+        let state = ClientState::load(state_path)?;
+        if let Some(e) = state.get(id) {
+            println!("[{}] {} → downloading", e.id, e.name);
+        }
+        return Ok(());
+    }
+
+    // Fallback: sin daemon.
     let mut state = ClientState::load(state_path)?;
     let entry = state.get_mut(id)
         .ok_or_else(|| anyhow!("flow '{}' not found", id))?;
 
     match &entry.state {
-        DownloadState::Seeding => {
-            println!("[{}] already seeding", id);
-        }
-        DownloadState::Downloading => {
-            println!("[{}] already downloading", id);
-        }
+        DownloadState::Seeding     => println!("[{}] already seeding", id),
+        DownloadState::Downloading => println!("[{}] already downloading", id),
         _ => {
             entry.state = DownloadState::Downloading;
             println!("[{}] {} → downloading", id, entry.name);
         }
     }
-
     state.save(state_path)?;
     Ok(())
 }
 
 /// Pausa la descarga de un BitFlow.
-pub fn cmd_pause(id: &str, state_path: &Path) -> Result<()> {
+pub async fn cmd_pause(id: &str, state_path: &Path, socket_path: &Path) -> Result<()> {
+    if let Some(resp) = try_ipc(socket_path, &IpcRequest::FlowPause { id: id.into() }).await {
+        match resp {
+            IpcResponse::Ok => {}
+            IpcResponse::Error { message } => return Err(anyhow!("{}", message)),
+            _ => {}
+        }
+        println!("[{}] → paused", id);
+        return Ok(());
+    }
+
     let mut state = ClientState::load(state_path)?;
     let entry = state.get_mut(id)
         .ok_or_else(|| anyhow!("flow '{}' not found", id))?;
-
     entry.state = DownloadState::Paused;
     println!("[{}] {} → paused", id, entry.name);
     state.save(state_path)?;
@@ -135,32 +170,42 @@ pub fn cmd_pause(id: &str, state_path: &Path) -> Result<()> {
 }
 
 /// Detiene y elimina un BitFlow de la lista.
-pub fn cmd_stop(id: &str, state_path: &Path) -> Result<()> {
+pub async fn cmd_stop(id: &str, state_path: &Path, socket_path: &Path) -> Result<()> {
+    if let Some(resp) = try_ipc(socket_path, &IpcRequest::FlowStop { id: id.into() }).await {
+        match resp {
+            IpcResponse::Ok => {}
+            IpcResponse::Error { message } => return Err(anyhow!("{}", message)),
+            _ => {}
+        }
+        println!("[{}] removed", id);
+        return Ok(());
+    }
+
     let mut state = ClientState::load(state_path)?;
     let name = state.get(id)
         .ok_or_else(|| anyhow!("flow '{}' not found", id))?
         .name.clone();
-
     state.flows.retain(|k, v| k != id && !v.info_hash.starts_with(id));
     state.save(state_path)?;
     println!("[{}] {} removed", id, name);
     Ok(())
 }
 
-/// Muestra los peers de un BitFlow.
-pub fn cmd_peers(id: &str, state_path: &Path) -> Result<()> {
+/// Muestra los peers de un BitFlow (datos en tiempo real si el daemon está activo).
+pub async fn cmd_peers(id: &str, state_path: &Path, socket_path: &Path) -> Result<()> {
     let state = ClientState::load(state_path)?;
     let entry = state.get(id)
         .ok_or_else(|| anyhow!("flow '{}' not found", id))?;
 
-    println!("flow [{}] {} — {} peer(s) connected",
-        entry.id, entry.name, entry.peers);
+    let peers = match try_ipc(socket_path, &IpcRequest::FlowPeers { id: id.into() }).await {
+        Some(IpcResponse::Peers { count }) => count,
+        _ => entry.peers,
+    };
 
-    // En producción aquí haríamos IPC con el daemon para obtener la lista real.
-    if entry.peers == 0 {
+    println!("flow [{}] {} — {} peer(s) connected", entry.id, entry.name, peers);
+    if peers == 0 {
         println!("  (no peers)");
     }
-
     Ok(())
 }
 
@@ -273,9 +318,79 @@ fn collect_dir_files(
     Ok(())
 }
 
+// ── IPC cliente ───────────────────────────────────────────────────────────────
+
+/// Intenta conectar al daemon y enviar una petición IPC.
+/// Devuelve `None` si el daemon no está activo o si hay error de comunicación.
+async fn try_ipc(socket_path: &Path, req: &IpcRequest) -> Option<IpcResponse> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::UnixStream;
+
+    let stream = tokio::time::timeout(
+        std::time::Duration::from_millis(200),
+        UnixStream::connect(socket_path),
+    ).await.ok()?.ok()?;
+
+    let (read_half, mut write_half) = stream.into_split();
+    let json = serde_json::to_string(req).ok()?;
+    write_half.write_all(format!("{json}\n").as_bytes()).await.ok()?;
+
+    let mut lines = BufReader::new(read_half).lines();
+    let line = tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        lines.next_line(),
+    ).await.ok()?.ok()??;
+
+    serde_json::from_str(&line).ok()
+}
+
+/// Detiene el daemon enviando IpcRequest::Shutdown al socket IPC.
+pub async fn cmd_serve_stop(config: &Config) -> Result<()> {
+    match try_ipc(&config.socket_path, &IpcRequest::Shutdown).await {
+        Some(_) => println!("daemon stopped"),
+        None    => println!("daemon is not running"),
+    }
+    Ok(())
+}
+
+/// Relanza el propio ejecutable sin --background para correr como daemon.
+pub fn cmd_serve_background() -> Result<()> {
+    let exe = std::env::current_exe()
+        .context("getting current executable path")?;
+
+    // Pasar todos los args excepto --background y -d.
+    let args: Vec<String> = std::env::args()
+        .skip(1)
+        .filter(|a| a != "--background" && a != "-d")
+        .collect();
+
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(&args);
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::null());
+
+    // En Unix: nuevo grupo de proceso para no recibir SIGHUP al cerrar la terminal.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
+    let child = cmd.spawn().context("spawning daemon process")?;
+    println!("daemon started in background (PID {})", child.id());
+    Ok(())
+}
+
 /// Arranca el servidor: tracker HTTP + DHT + endpoint QUIC + motor de descarga.
 pub async fn cmd_serve(config: &Config, state_path: &Path) -> Result<()> {
-    println!("starting bitturbulence daemon...");
+    // PID file para que el CLI pueda encontrar el daemon.
+    let pid = std::process::id();
+    if let Err(e) = std::fs::write(&config.pid_file, format!("{}\n", pid)) {
+        tracing::warn!("writing pid file: {e}");
+    }
+
+    println!("starting bitturbulence daemon (PID {pid})...");
 
     // DHT
     let dht_config = DhtConfig {
@@ -321,6 +436,7 @@ pub async fn cmd_serve(config: &Config, state_path: &Path) -> Result<()> {
         }
     }
 
+    let _ = std::fs::remove_file(&config.pid_file);
     Ok(())
 }
 

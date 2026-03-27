@@ -22,6 +22,7 @@
 //! | `state_loop`    | Persistencia periódica del estado                    |
 
 pub(crate) mod context;
+pub(crate) mod ipc;
 pub(crate) mod scheduler_actor;
 pub(crate) mod stream;
 pub(crate) mod drainer;
@@ -155,10 +156,27 @@ pub async fn run_daemon(config: &Config, state_path: &Path) -> Result<()> {
     }
 
     if !flow_ids.is_empty() {
-        tokio::spawn(state_loop::state_save_loop(state_path.to_path_buf(), flow_ids));
+        tokio::spawn(state_loop::state_save_loop(state_path.to_path_buf(), flow_ids.clone()));
     }
 
-    accept::accept_loop(endpoint, torrents, our_peer_id).await;
+    // ── Canal de shutdown ──────────────────────────────────────────────────────
+    // El servidor IPC dispara shutdown_tx cuando recibe IpcRequest::Shutdown.
+    // run_daemon selecciona entre accept_loop y shutdown_rx.changed().
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(false);
+
+    tokio::spawn(ipc::run_ipc_server(
+        config.socket_path.clone(),
+        flow_ids,
+        state_path.to_path_buf(),
+        shutdown_tx,
+    ));
+
+    tokio::select! {
+        _ = accept::accept_loop(endpoint, torrents, our_peer_id) => {}
+        _ = shutdown_rx.changed() => {
+            info!("daemon shutdown requested via IPC");
+        }
+    }
 
     Ok(())
 }

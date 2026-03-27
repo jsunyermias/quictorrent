@@ -27,7 +27,14 @@ pub enum Commands {
     /// Muestra el estado de todas las descargas.
     Status,
     /// Arranca el servidor (tracker + DHT + QUIC endpoint).
-    Serve,
+    Serve {
+        /// Ejecutar el daemon en segundo plano.
+        #[arg(short = 'd', long)]
+        background: bool,
+        /// Detener el daemon en ejecución.
+        #[arg(long, conflicts_with = "background")]
+        stop: bool,
+    },
 }
 
 #[derive(Subcommand)]

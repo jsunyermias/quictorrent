@@ -19,6 +19,10 @@ pub struct Config {
     pub state_file:   PathBuf,
     /// Ruta de la tabla de routing DHT.
     pub dht_routing_table: PathBuf,
+    /// Ruta del socket Unix IPC.
+    pub socket_path: PathBuf,
+    /// Ruta del PID file del daemon.
+    pub pid_file: PathBuf,
 }
 
 impl Default for Config {
@@ -34,6 +38,8 @@ impl Default for Config {
             tracker_auth_token: None,
             state_file:        base.join("state.json"),
             dht_routing_table: base.join("routing.json"),
+            socket_path:       base.join("submarine.sock"),
+            pid_file:          base.join("submarine.pid"),
         }
     }
 }

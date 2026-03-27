@@ -2,6 +2,7 @@ mod cli;
 mod commands;
 mod config;
 mod daemon;
+mod ipc_proto;
 mod state;
 
 use std::path::PathBuf;
@@ -15,7 +16,6 @@ use bitturbulence_protocol::Priority;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Inicializar logging (RUST_LOG=info por defecto)
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env()
@@ -25,7 +25,6 @@ async fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
-    // Cargar configuración
     let config_path = cli.config.unwrap_or_else(|| {
         dirs_next::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
@@ -33,35 +32,41 @@ async fn main() -> Result<()> {
             .join("config.json")
     });
 
-    let config = Config::load(&config_path)?;
+    let config     = Config::load(&config_path)?;
     let state_path = config.state_file.clone();
+    let sock_path  = config.socket_path.clone();
 
     match cli.command {
         Commands::Status => {
-            commands::cmd_status(&state_path)?;
+            commands::cmd_status(&state_path, &sock_path).await?;
         }
 
-        Commands::Serve => {
-            commands::cmd_serve(&config, &state_path).await?;
+        Commands::Serve { background, stop } => {
+            if stop {
+                commands::cmd_serve_stop(&config).await?;
+            } else if background {
+                commands::cmd_serve_background()?;
+            } else {
+                commands::cmd_serve(&config, &state_path).await?;
+            }
         }
 
         Commands::Flow { action } => match action {
             FlowAction::Add { path, save, priority } => {
-                let prio = Priority::from_u8(priority)
-                    .unwrap_or(Priority::Normal);
+                let prio = Priority::from_u8(priority).unwrap_or(Priority::Normal);
                 commands::cmd_add(&path, save, prio, &state_path, &config).await?;
             }
             FlowAction::Start { id } => {
-                commands::cmd_start(&id, &state_path)?;
+                commands::cmd_start(&id, &state_path, &sock_path).await?;
             }
             FlowAction::Pause { id } => {
-                commands::cmd_pause(&id, &state_path)?;
+                commands::cmd_pause(&id, &state_path, &sock_path).await?;
             }
             FlowAction::Stop { id } => {
-                commands::cmd_stop(&id, &state_path)?;
+                commands::cmd_stop(&id, &state_path, &sock_path).await?;
             }
             FlowAction::Peers { id } => {
-                commands::cmd_peers(&id, &state_path)?;
+                commands::cmd_peers(&id, &state_path, &sock_path).await?;
             }
             FlowAction::Create { path, name, trackers, comment, priority, output } => {
                 let prio = Priority::from_u8(priority).unwrap_or(Priority::Normal);
