@@ -1,6 +1,6 @@
 # Issues abiertos — bitturbulence
 
-Ordenados por prioridad de implementación. Actualizado: 2026-03-27 (issues #88–#121 añadidos, gap analysis vs libtorrent). Última revisión completa: 2026-03-27 (commit d6c705f).
+Ordenados por prioridad de implementación. Actualizado: 2026-03-27 (issues #88–#137 añadidos, gap analysis vs libtorrent). Última revisión completa: 2026-03-27 (commit d6c705f).
 
 | # | Título | Prioridad |
 |---|--------|-----------|
@@ -28,6 +28,8 @@ Ordenados por prioridad de implementación. Actualizado: 2026-03-27 (issues #88�
 | [#94](https://github.com/jsunyermias/bitturbulence/issues/94) | Estado de sesión completo: serializar prioridades, tracker activo y stats (más allá del have bitfield) | 🟠 Media |
 | [#95](https://github.com/jsunyermias/bitturbulence/issues/95) | Upload slot auto-optimization: calcular número óptimo de slots unchoked según capacidad de subida | 🟠 Media |
 | [#118](https://github.com/jsunyermias/bitturbulence/issues/118) | Prioridad de archivo fine-grained: niveles 0–7 por archivo (no solo skip/normal/alta) | 🟠 Media |
+| [#122](https://github.com/jsunyermias/bitturbulence/issues/122) | Límite de ancho de banda por flow: tasa upload/download configurable por flow independiente del límite global | 🟠 Media |
+| [#123](https://github.com/jsunyermias/bitturbulence/issues/123) | Force recheck: re-verificar todos los archivos de un flow contra sus hashes desde CLI/IPC | 🟠 Media |
 | [#41](https://github.com/jsunyermias/bitturbulence/issues/41) | Límite de conexiones simultáneas de peers + evicción LRU | 🟠 Media-alta |
 | [#43](https://github.com/jsunyermias/bitturbulence/issues/43) | Validar longitud de bloque en mensajes Piece recibidos | 🟠 Media |
 | [#42](https://github.com/jsunyermias/bitturbulence/issues/42) | Blacklisting de peers por mismatches de hash Merkle reiterados | 🟠 Media |
@@ -66,6 +68,18 @@ Ordenados por prioridad de implementación. Actualizado: 2026-03-27 (issues #88�
 | [#104](https://github.com/jsunyermias/bitturbulence/issues/104) | Scrape en el cliente: consultar seeders/leechers de un swarm antes de conectar | 🟡 Media-baja |
 | [#105](https://github.com/jsunyermias/bitturbulence/issues/105) | Peer classes: agrupar peers por rango de IP y aplicar rate limits o prioridad diferente | 🟡 Media-baja |
 | [#116](https://github.com/jsunyermias/bitturbulence/issues/116) | Auto-gestión de flows: daemon inicia/detiene flows automáticamente según ratio y tiempo de seed | 🟡 Media-baja |
+| [#124](https://github.com/jsunyermias/bitturbulence/issues/124) | Prioridad a nivel de pieza: asignar prioridad 0–7 a piezas individuales (más fino que por archivo) | 🟡 Media-baja |
+| [#125](https://github.com/jsunyermias/bitturbulence/issues/125) | Renombrar archivo dentro de un flow en caliente sin detener ni mover el flow | 🟡 Media-baja |
+| [#126](https://github.com/jsunyermias/bitturbulence/issues/126) | Mover storage en caliente: relocalizar archivos de un flow mientras está activo (descargando o seeding) | 🟡 Media-baja |
+| [#127](https://github.com/jsunyermias/bitturbulence/issues/127) | Inyectar datos locales: añadir pieza desde disco como si se hubiera descargado (cross-seeding sin red) | 🟡 Media-baja |
+| [#128](https://github.com/jsunyermias/bitturbulence/issues/128) | Manual peer connect: forzar conexión a IP:puerto específico desde CLI sin esperar al tracker/DHT | 🟡 Media-baja |
+| [#129](https://github.com/jsunyermias/bitturbulence/issues/129) | Metadatos en .bitflow: campos comment, creator y creation_date en el metainfo | 🟡 Media-baja |
+| [#130](https://github.com/jsunyermias/bitturbulence/issues/130) | Detección de flows duplicados: alertar y rechazar cuando se añade un flow con info_hash ya existente | 🟡 Media-baja |
+| [#131](https://github.com/jsunyermias/bitturbulence/issues/131) | BEP 38 Collections: campo de colección en el metainfo para agrupar flows relacionados | 🟡 Media-baja |
+| [#132](https://github.com/jsunyermias/bitturbulence/issues/132) | Re-announce manual: forzar anuncio inmediato a tracker/DHT/LSD desde CLI sin esperar el intervalo | 🟡 Media-baja |
+| [#133](https://github.com/jsunyermias/bitturbulence/issues/133) | Upload mode automático: cuando el disco está lleno, pausar descarga y continuar subiendo | 🟡 Media-baja |
+| [#134](https://github.com/jsunyermias/bitturbulence/issues/134) | Persistencia de lista de peers: guardar peers conocidos en el estado de sesión para reconectar más rápido | 🟡 Media-baja |
+| [#135](https://github.com/jsunyermias/bitturbulence/issues/135) | BEP 9 ut_metadata: descargar metainfo .bitflow directamente desde peers del swarm (no solo tracker/DHT) | 🟡 Media-baja |
 | [#18](https://github.com/jsunyermias/bitturbulence/issues/18) | NAT traversal (épico, ver #57–#59 para subissues) | 🟡 Media-baja |
 | [#13](https://github.com/jsunyermias/bitturbulence/issues/13) | Cliente tracker HTTP/UDP estándar (compat. BitTorrent) | 🟡 Baja |
 | [#33](https://github.com/jsunyermias/bitturbulence/issues/33) | Streaming: prioridad automática de primeras piezas para reproducción progresiva | 🔵 Baja |
@@ -90,6 +104,8 @@ Ordenados por prioridad de implementación. Actualizado: 2026-03-27 (issues #88�
 | [#115](https://github.com/jsunyermias/bitturbulence/issues/115) | Bandwidth scheduler: límites de subida/bajada diferentes por franja horaria | 🔵 Baja |
 | [#117](https://github.com/jsunyermias/bitturbulence/issues/117) | Share mode: seedear piezas de otros flows para maximizar ratio sin descargar contenido útil | 🔵 Baja |
 | [#119](https://github.com/jsunyermias/bitturbulence/issues/119) | Peer fingerprint configurable: peer ID con versión de cliente identificable opcionalmente | 🔵 Baja |
+| [#136](https://github.com/jsunyermias/bitturbulence/issues/136) | Piece deadlines: deadline temporal por pieza para garantizar entrega antes de un timestamp (streaming preciso) | 🔵 Baja |
+| [#137](https://github.com/jsunyermias/bitturbulence/issues/137) | Delayed Have batching: agrupar mensajes HavePiece en lotes para reducir overhead de protocolo | 🔵 Baja |
 | [#120](https://github.com/jsunyermias/bitturbulence/issues/120) | lt_trackers extension: intercambiar lista de trackers activos entre peers conectados | 🔵 Baja |
 | [#121](https://github.com/jsunyermias/bitturbulence/issues/121) | BEP 52 BitTorrent v2: leer metainfo v2 con SHA-256 y piece layers (para importar .torrent v2) | 🔵 Baja |
 | [#20](https://github.com/jsunyermias/bitturbulence/issues/20) | Limitación de velocidad: throttling global de subida/bajada | 🔵 Baja |
