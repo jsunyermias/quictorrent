@@ -32,6 +32,9 @@ pub enum TrackerError {
     #[error("invalid info hash: {0}")]
     InvalidInfoHash(String),
 
+    #[error("invalid peer id: {0}")]
+    InvalidPeerId(String),
+
     #[error("authentication required")]
     AuthRequired,
 

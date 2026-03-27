@@ -109,25 +109,34 @@ async fn process_request(
                         message: e.to_string(),
                     },
                     Ok(peers) => {
-                        let ih = hex::decode(&req.info_hash)
+                        match hex::decode(&req.info_hash)
                             .ok()
                             .and_then(|b| b.try_into().ok())
-                            .unwrap_or([0u8; 32]);
-                        let (complete, incomplete, _) = store.scrape(&ih);
-                        let peer_list = peers
-                            .into_iter()
-                            .map(|r| PeerInfo {
-                                peer_id: hex::encode(r.peer_id),
-                                addr: r.addr,
-                            })
-                            .collect();
-                        TrackerResponse::Announce(AnnounceResponse {
-                            interval: config.announce_interval,
-                            min_interval: Some(config.min_interval),
-                            peers: peer_list,
-                            complete,
-                            incomplete,
-                        })
+                        {
+                            None => TrackerResponse::Error {
+                                // store.announce() already validated info_hash — this path
+                                // is unreachable in practice, but we handle it explicitly
+                                // instead of silently returning stats for the zero hash.
+                                message: "info_hash inválido".into(),
+                            },
+                            Some(ih) => {
+                                let (complete, incomplete, _) = store.scrape(&ih);
+                                let peer_list = peers
+                                    .into_iter()
+                                    .map(|r| PeerInfo {
+                                        peer_id: hex::encode(r.peer_id),
+                                        addr: r.addr,
+                                    })
+                                    .collect();
+                                TrackerResponse::Announce(AnnounceResponse {
+                                    interval: config.announce_interval,
+                                    min_interval: Some(config.min_interval),
+                                    peers: peer_list,
+                                    complete,
+                                    incomplete,
+                                })
+                            }
+                        }
                     }
                 }
             }

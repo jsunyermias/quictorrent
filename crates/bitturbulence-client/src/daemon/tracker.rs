@@ -18,6 +18,7 @@ pub async fn tracker_loop(
     endpoint: Arc<QuicEndpoint>,
     peer_id: [u8; 32],
     listen_port: u16,
+    advertise_addr: Option<String>,
     known_peers: Arc<Mutex<HashSet<String>>>,
 ) {
     let client = match TrackerClient::new(&tracker_url, None) {
@@ -28,7 +29,10 @@ pub async fn tracker_loop(
         }
     };
 
-    let listen_addr = format!("127.0.0.1:{listen_port}");
+    let listen_addr = match advertise_addr {
+        Some(ref ip) => format!("{ip}:{listen_port}"),
+        None => format!("127.0.0.1:{listen_port}"),
+    };
     let mut timer = interval(ANNOUNCE_INTERVAL);
     let mut event = AnnounceEvent::Started;
 

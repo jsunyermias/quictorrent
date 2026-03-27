@@ -24,8 +24,8 @@ pub async fn dht_loop(
 ) {
     handle.bootstrap().await;
     info!(
-        "DHT bootstrap complete, routing table size: {}",
-        handle.local_id().as_bytes().len()
+        "DHT bootstrap complete, local node: {}",
+        hex::encode(&handle.local_id().as_bytes()[..4])
     );
 
     let mut timer = interval(DHT_ANNOUNCE_INTERVAL);

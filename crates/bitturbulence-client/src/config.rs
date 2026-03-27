@@ -23,6 +23,9 @@ pub struct Config {
     pub socket_path: PathBuf,
     /// Ruta del PID file del daemon.
     pub pid_file: PathBuf,
+    /// Dirección IP anunciada a trackers y DHT (para peers remotos).
+    /// Si es None, se usa "127.0.0.1" (solo válido para pruebas locales).
+    pub advertise_addr: Option<String>,
 }
 
 impl Default for Config {
@@ -39,6 +42,7 @@ impl Default for Config {
             dht_routing_table: base.join("routing.json"),
             socket_path: base.join("submarine.sock"),
             pid_file: base.join("submarine.pid"),
+            advertise_addr: None,
         }
     }
 }

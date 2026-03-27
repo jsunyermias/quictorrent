@@ -141,6 +141,7 @@ pub async fn run_daemon(config: &Config, state_path: &Path) -> Result<()> {
                 endpoint.clone(),
                 our_peer_id,
                 config.listen_port,
+                config.advertise_addr.clone(),
                 known_peers.clone(),
             ));
         }

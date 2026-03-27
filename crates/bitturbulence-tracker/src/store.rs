@@ -124,7 +124,7 @@ impl PeerStore {
         let info_hash = parse_hex32(&req.info_hash)
             .map_err(|e| TrackerError::InvalidInfoHash(e.to_string()))?;
         let peer_id =
-            parse_hex32(&req.peer_id).map_err(|e| TrackerError::InvalidInfoHash(e.to_string()))?;
+            parse_hex32(&req.peer_id).map_err(|e| TrackerError::InvalidPeerId(e.to_string()))?;
 
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
 
@@ -205,13 +205,11 @@ impl PeerStore {
     pub fn flush(&self) -> Result<()> {
         // Orden de adquisición: inner primero (coherente con el resto).
         // Clonar los registros para liberar el lock antes de tocar SQLite.
-        let snapshot: Vec<PeerRecord> = {
+        let (snapshot, num_torrents): (Vec<PeerRecord>, usize) = {
             let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-            inner.values().flat_map(|peers| peers.values().cloned()).collect()
-        };
-        let num_torrents = {
-            let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-            inner.len()
+            let records = inner.values().flat_map(|peers| peers.values().cloned()).collect();
+            let num = inner.len();
+            (records, num)
         };
 
         let db = self.db.lock().unwrap_or_else(|e| e.into_inner());

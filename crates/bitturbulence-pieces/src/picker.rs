@@ -98,6 +98,9 @@ impl PiecePicker {
     }
 
     pub fn progress(&self) -> f32 {
+        if self.num_pieces == 0 {
+            return 1.0;
+        }
         self.num_complete() as f32 / self.num_pieces as f32
     }
 }
