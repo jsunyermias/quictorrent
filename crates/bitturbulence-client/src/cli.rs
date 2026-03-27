@@ -60,4 +60,24 @@ pub enum FlowAction {
     Peers {
         id: String,
     },
+    /// Crea un fichero .bitflow a partir de un archivo o directorio.
+    Create {
+        /// Archivo o directorio a empaquetar.
+        path: PathBuf,
+        /// Nombre del torrent (por defecto: nombre del archivo/directorio).
+        #[arg(short, long)]
+        name: Option<String>,
+        /// URL de tracker (repetible: --tracker url1 --tracker url2).
+        #[arg(short = 't', long = "tracker")]
+        trackers: Vec<String>,
+        /// Comentario opcional.
+        #[arg(short, long)]
+        comment: Option<String>,
+        /// Prioridad (0=minimum .. 8=maximum, por defecto 4=normal).
+        #[arg(short, long, default_value = "4")]
+        priority: u8,
+        /// Directorio de salida del .bitflow (por defecto: directorio padre del path).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }

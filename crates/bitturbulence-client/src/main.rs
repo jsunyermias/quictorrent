@@ -63,6 +63,10 @@ async fn main() -> Result<()> {
             FlowAction::Peers { id } => {
                 commands::cmd_peers(&id, &state_path)?;
             }
+            FlowAction::Create { path, name, trackers, comment, priority, output } => {
+                let prio = Priority::from_u8(priority).unwrap_or(Priority::Normal);
+                commands::cmd_create(&path, name, trackers, comment, prio, output)?;
+            }
         },
     }
 
