@@ -139,6 +139,26 @@ pub async fn run_peer_downloader(
         let endgame_mode = unstable || endgame;
         let max_active  = if endgame_mode { MAX_STREAMS } else { DEFAULT_STREAMS };
 
+        // ─ Scale-down: cerrar slots idle si superamos max_active ──────
+        //
+        // Ocurre cuando salimos del modo inestable (recent_fails reset tras
+        // INSTABILITY_RESET_WINDOW bloques ok) sin estar en endgame.
+        // Cerramos solo slots idle: soltar task_tx → el worker QUIC sale
+        // limpiamente al recibir None en su task_rx.
+        if slots.len() > max_active {
+            let excess = slots.len() - max_active;
+            let to_close: Vec<usize> = slots
+                .iter()
+                .filter(|(_, s)| s.active_block.is_none())
+                .map(|(&id, _)| id)
+                .take(excess)
+                .collect();
+            for id in to_close {
+                slots.remove(&id);
+                debug!(streams = slots.len(), max_active, "scaled down data stream");
+            }
+        }
+
         // ─ Asignar bloques a slots idle ────────────────────────────────
         for slot in slots.values_mut() {
             if slot.active_block.is_none() {
