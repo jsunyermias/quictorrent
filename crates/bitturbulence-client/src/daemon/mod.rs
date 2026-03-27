@@ -30,6 +30,7 @@ pub(crate) mod peer;
 pub(crate) mod accept;
 pub(crate) mod tracker;
 pub(crate) mod state_loop;
+pub(crate) mod dht;
 use context::FlowCtx;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -109,6 +110,8 @@ pub async fn run_daemon(config: &Config, state_path: &Path) -> Result<()> {
 
     let torrents = Arc::new(torrents);
 
+    let mut per_flow_known_peers: Vec<Arc<Mutex<HashSet<String>>>> = Vec::new();
+
     for (_, ctx) in &flow_ids {
         let known_peers = Arc::new(Mutex::new(HashSet::<String>::new()));
         for tracker_url in &ctx.meta.trackers {
@@ -120,6 +123,34 @@ pub async fn run_daemon(config: &Config, state_path: &Path) -> Result<()> {
                 config.listen_port,
                 known_peers.clone(),
             ));
+        }
+        per_flow_known_peers.push(known_peers);
+    }
+
+    // DHT peer discovery
+    let dht_bind = format!("0.0.0.0:{}", config.listen_port);
+    let dht_config = bitturbulence_dht::DhtConfig {
+        bind_addr:          dht_bind,
+        bootstrap_nodes:    config.dht_bootstrap.clone(),
+        routing_table_path: Some(config.dht_routing_table.clone()),
+    };
+    match bitturbulence_dht::DhtNode::new(dht_config) {
+        Err(e) => warn!("DHT init: {e}"),
+        Ok(dht_node) => match dht_node.bind().await {
+            Err(e) => warn!("DHT bind: {e}"),
+            Ok(dht_handle) => {
+                let dht_flows: Vec<_> = flow_ids.iter()
+                    .zip(per_flow_known_peers.iter())
+                    .map(|((_, ctx), kp)| (ctx.clone(), kp.clone()))
+                    .collect();
+                tokio::spawn(dht::dht_loop(
+                    dht_handle,
+                    dht_flows,
+                    config.listen_port,
+                    endpoint.clone(),
+                    our_peer_id,
+                ));
+            }
         }
     }
 
