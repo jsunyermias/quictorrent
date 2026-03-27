@@ -5,7 +5,6 @@ Ordenados de más a menos prioritario. Actualizado: 2026-03-27.
 | # | Título | Prioridad |
 |---|--------|-----------|
 | [#31](https://github.com/jsunyermias/bitturbulence/issues/31) | Propagación de HavePiece a todos los peers conectados (filler) | 🔴 Alta |
-| [#19](https://github.com/jsunyermias/bitturbulence/issues/19) | Reanudación de descargas: persistencia del estado de bloques completados | 🔴 Alta |
 | [#28](https://github.com/jsunyermias/bitturbulence/issues/28) | Daemon en background + IPC Unix socket | 🟠 Media-alta |
 | [#21](https://github.com/jsunyermias/bitturbulence/issues/21) | `submarine flow create`: herramienta nativa Rust para generar `.bitflow` | 🟠 Media-alta |
 | [#26](https://github.com/jsunyermias/bitturbulence/issues/26) | Multiplexación adaptativa: ajuste de streams según endgame e inestabilidad | 🟠 Media |
@@ -31,3 +30,5 @@ Ordenados de más a menos prioritario. Actualizado: 2026-03-27.
 |---|--------|--------|
 | [#36](https://github.com/jsunyermias/bitturbulence/issues/36) | Seeder automático: pasar a modo Seeding al completar la descarga | f4c90ee |
 | [#29](https://github.com/jsunyermias/bitturbulence/issues/29) | Integrar DHT con descubrimiento de peers en el daemon | c9a8746 |
+| [#31](https://github.com/jsunyermias/bitturbulence/issues/31) | Propagación de HavePiece a todos los peers conectados | e3de67d |
+| [#19](https://github.com/jsunyermias/bitturbulence/issues/19) | Reanudación de descargas: persistencia del have bitfield | 6723f3b |
