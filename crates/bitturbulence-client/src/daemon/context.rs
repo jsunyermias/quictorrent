@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::{Arc, atomic::{AtomicU64, AtomicUsize, Ordering}};
 
 use anyhow::{Context, Result};
-use tokio::sync::{Mutex, watch};
+use tokio::sync::{Mutex, broadcast, watch};
 use tracing::{info, warn};
 
 use bitturbulence_pieces::{BlockScheduler, TorrentStore, piece_root_from_block_hashes};
@@ -25,6 +25,9 @@ pub struct FlowCtx {
     /// Señal de descarga completa. Se emite `true` una sola vez cuando todos
     /// los archivos están verificados. Drainers y state_loop la suscriben.
     pub complete_tx: watch::Sender<bool>,
+    /// Broadcast de piezas verificadas: (file_index, piece_index).
+    /// Drainers y fillers suscriben para anunciar HavePiece a sus peers.
+    pub have_piece_tx: broadcast::Sender<(usize, u32)>,
 }
 
 impl FlowCtx {
@@ -54,7 +57,8 @@ impl FlowCtx {
             have_init.push(file_have);
         }
 
-        let (complete_tx, _) = watch::channel(false);
+        let (complete_tx, _)    = watch::channel(false);
+        let (have_piece_tx, _)  = broadcast::channel(64);
 
         Ok(Arc::new(Self {
             sched: SchedulerHandle::spawn(raw_schedulers),
@@ -64,6 +68,7 @@ impl FlowCtx {
             downloaded: AtomicU64::new(0),
             peer_count: AtomicUsize::new(0),
             complete_tx,
+            have_piece_tx,
         }))
     }
 
@@ -91,6 +96,7 @@ impl FlowCtx {
         let piece_bytes = self.meta.files[fi].piece_len(pi) as u64;
         if &computed == expected {
             self.have.lock().await[fi][pi as usize] = true;
+            let _ = self.have_piece_tx.send((fi, pi));
             self.sched.mark_piece_verified(fi, pi).await;
             self.downloaded.fetch_add(piece_bytes, Ordering::Relaxed);
             info!(fi, pi, bytes = piece_bytes, "piece merkle root ok");
@@ -177,6 +183,17 @@ mod tests {
         ctx.signal_if_complete().await;
         ctx.signal_if_complete().await; // segunda llamada: no-op
         assert!(*ctx.complete_tx.borrow());
+    }
+
+    #[tokio::test]
+    async fn have_piece_broadcast_fires_on_verify() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+        let mut rx = ctx.have_piece_tx.subscribe();
+
+        let _ = ctx.have_piece_tx.send((0, 0));
+        let msg = rx.recv().await.unwrap();
+        assert_eq!(msg, (0, 0));
     }
 
     #[tokio::test]

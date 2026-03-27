@@ -27,6 +27,7 @@ pub async fn run_peer_filler(
     // Anunciar nuestra disponibilidad al drainer.
     send_our_bitfields(ctx, &mut ctrl_w).await?;
 
+    let mut have_piece_rx = ctx.have_piece_tx.subscribe();
     let mut ka_timer = interval(KEEPALIVE_INTERVAL);
     ka_timer.tick().await;
 
@@ -59,6 +60,19 @@ pub async fn run_peer_filler(
                         tracing::debug!("accept data stream: {e}");
                         break;
                     }
+                }
+            }
+
+            piece = have_piece_rx.recv() => {
+                match piece {
+                    Ok((fi, pi)) => {
+                        let _ = ctrl_w.send(Message::HavePiece {
+                            file_index: fi as u16,
+                            piece_index: pi as u32,
+                        }).await;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return Ok(()),
                 }
             }
 

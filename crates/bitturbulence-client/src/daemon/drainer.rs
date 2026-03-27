@@ -89,7 +89,8 @@ pub async fn run_peer_downloader(
     send_our_bitfields(ctx, &mut ctrl_w).await?;
 
     // ── Comprobar si el flow ya está completo antes de abrir streams ────
-    let mut complete_rx = ctx.complete_tx.subscribe();
+    let mut complete_rx   = ctx.complete_tx.subscribe();
+    let mut have_piece_rx = ctx.have_piece_tx.subscribe();
     if *complete_rx.borrow() {
         return Ok(());
     }
@@ -247,11 +248,7 @@ pub async fn run_peer_downloader(
                         }
                         let piece_ready = ctx.sched.block_done(fi, pi, bi, hash).await;
                         if piece_ready {
-                            if ctx.verify_and_complete(fi, pi).await {
-                                let _ = ctrl_w.send(Message::HavePiece {
-                                    file_index: fi as u16, piece_index: pi,
-                                }).await;
-                            }
+                            ctx.verify_and_complete(fi, pi).await;
                         }
                         // Ventana deslizante: resetear fallos cada INSTABILITY_RESET_WINDOW bloques.
                         blocks_ok += 1;
@@ -285,6 +282,19 @@ pub async fn run_peer_downloader(
 
             _ = ka_timer.tick() => {
                 ctrl_w.send(Message::KeepAlive).await?;
+            }
+
+            piece = have_piece_rx.recv() => {
+                match piece {
+                    Ok((fi, pi)) => {
+                        let _ = ctrl_w.send(Message::HavePiece {
+                            file_index: fi as u16,
+                            piece_index: pi as u32,
+                        }).await;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return Ok(()),
+                }
             }
 
             _ = complete_rx.changed() => {
