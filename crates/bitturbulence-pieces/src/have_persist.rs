@@ -52,4 +52,20 @@ mod tests {
         let loaded = load_have(dir.path()).unwrap().unwrap();
         assert_eq!(loaded[0], vec![true, false, false, true]);
     }
+
+    #[test]
+    fn load_corrupted_json_returns_error() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".have.json"), b"not valid json {{{{").unwrap();
+        assert!(load_have(dir.path()).is_err(), "JSON malformado debe devolver error");
+    }
+
+    #[test]
+    fn save_and_load_empty_bitfield() {
+        let dir = tempfile::tempdir().unwrap();
+        let have: Vec<Vec<bool>> = vec![];
+        save_have(dir.path(), &have).unwrap();
+        let loaded = load_have(dir.path()).unwrap().unwrap();
+        assert!(loaded.is_empty());
+    }
 }

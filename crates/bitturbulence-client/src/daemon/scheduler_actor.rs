@@ -230,6 +230,91 @@ async fn run_actor(mut schedulers: Vec<BlockScheduler>, mut rx: mpsc::Receiver<M
     }
 }
 
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitturbulence_pieces::BlockScheduler;
+    use bitturbulence_protocol::BLOCK_SIZE;
+
+    /// Un scheduler de 1 archivo, N piezas, cada pieza = 1 bloque (BLOCK_SIZE).
+    fn make_handle(num_pieces: usize) -> SchedulerHandle {
+        let sched = BlockScheduler::new(0, num_pieces, BLOCK_SIZE, BLOCK_SIZE);
+        SchedulerHandle::spawn(vec![sched])
+    }
+
+    #[tokio::test]
+    async fn is_complete_with_no_schedulers() {
+        let handle = SchedulerHandle::spawn(vec![]);
+        assert!(handle.is_complete().await, "sin schedulers = completo vacío");
+    }
+
+    #[tokio::test]
+    async fn is_complete_after_all_pieces_marked() {
+        let handle = make_handle(2);
+        assert!(!handle.is_complete().await);
+        handle.mark_piece_verified(0, 0).await;
+        assert!(!handle.is_complete().await, "falta la pieza 1");
+        handle.mark_piece_verified(0, 1).await;
+        assert!(handle.is_complete().await, "todas las piezas verificadas");
+    }
+
+    #[tokio::test]
+    async fn block_done_signals_piece_ready_for_single_block_piece() {
+        let handle = make_handle(1);
+        // 1 pieza × 1 bloque → block_done con bi=0 devuelve true
+        let ready = handle.block_done(0, 0, 0, [0xABu8; 32]).await;
+        assert!(ready, "pieza de un solo bloque debe estar lista inmediatamente");
+    }
+
+    #[tokio::test]
+    async fn block_done_oob_fi_does_not_panic() {
+        let handle = make_handle(1);
+        // fi=99 está fuera de rango — no debe entrar en pánico
+        let ready = handle.block_done(99, 0, 0, [0u8; 32]).await;
+        assert!(!ready, "fi inválido devuelve false");
+    }
+
+    #[tokio::test]
+    async fn block_failed_oob_fi_does_not_panic() {
+        let handle = make_handle(1);
+        handle.block_failed(99, 0, 0).await;
+        handle.add_peer_bitfield(99, vec![true]).await;
+        handle.remove_peer_bitfield(99, vec![true]).await;
+        handle.add_peer_have(99, 0).await;
+        // ninguno debe entrar en pánico
+        assert!(!handle.is_complete().await);
+    }
+
+    #[tokio::test]
+    async fn pick_block_returns_none_for_have_none_peer() {
+        let handle = make_handle(2);
+        let avail = vec![PeerAvail::HaveNone];
+        let task = handle.pick_block(&avail, false).await;
+        assert!(task.is_none(), "peer sin piezas → ningún bloque disponible");
+    }
+
+    #[tokio::test]
+    async fn pick_block_returns_task_for_have_all_peer() {
+        let handle = make_handle(2);
+        let avail = vec![PeerAvail::HaveAll];
+        let task = handle.pick_block(&avail, false).await;
+        assert!(task.is_some(), "peer con todas las piezas → hay tarea disponible");
+    }
+
+    #[tokio::test]
+    async fn total_pending_decreases_on_verify() {
+        let handle = make_handle(3);
+        assert_eq!(handle.total_pending().await, 3);
+        handle.mark_piece_verified(0, 0).await;
+        assert_eq!(handle.total_pending().await, 2);
+        handle.mark_piece_verified(0, 1).await;
+        handle.mark_piece_verified(0, 2).await;
+        assert_eq!(handle.total_pending().await, 0);
+    }
+}
+
 // ── Lógica de selección de bloque (síncrona dentro del actor) ─────────────────
 
 /// Selecciona el bloque más prioritario disponible para el peer dado.

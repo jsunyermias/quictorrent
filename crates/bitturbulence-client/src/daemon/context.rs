@@ -274,4 +274,50 @@ mod tests {
         // El receiver debe ver el cambio.
         assert!(*rx.borrow_and_update());
     }
+
+    #[tokio::test]
+    async fn verify_and_complete_succeeds_with_correct_hash() {
+        let dir = tempfile::tempdir().unwrap();
+        // minimal_meta: piece_hashes[0] = [0u8; 32]
+        // merkle_root([h]) = h, así que block_done con [0u8; 32] debe coincidir.
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+        let mut rx = ctx.have_piece_tx.subscribe();
+
+        let piece_ready = ctx.sched.block_done(0, 0, 0, [0u8; 32]).await;
+        assert!(piece_ready, "pieza de 1 bloque lista tras block_done");
+
+        let ok = ctx.verify_and_complete(0, 0).await;
+        assert!(ok, "hash correcto debe verificarse OK");
+        assert!(ctx.have.lock().await[0][0], "have[0][0] debe ser true");
+        assert_eq!(
+            ctx.downloaded.load(std::sync::atomic::Ordering::Relaxed),
+            bitturbulence_protocol::BLOCK_SIZE as u64,
+        );
+        assert_eq!(rx.try_recv().unwrap(), (0, 0), "have_piece_tx debe emitir (0,0)");
+    }
+
+    #[tokio::test]
+    async fn verify_and_complete_fails_with_wrong_hash() {
+        let dir = tempfile::tempdir().unwrap();
+        // piece_hashes[0] = [0u8; 32]; enviamos [0xFFu8; 32] → mismatch.
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+
+        let _ = ctx.sched.block_done(0, 0, 0, [0xFFu8; 32]).await;
+
+        let ok = ctx.verify_and_complete(0, 0).await;
+        assert!(!ok, "hash incorrecto debe fallar la verificación");
+        assert!(!ctx.have.lock().await[0][0], "have[0][0] debe seguir false");
+        assert_eq!(ctx.downloaded.load(std::sync::atomic::Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn our_bitfield_returns_have_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+
+        assert_eq!(ctx.our_bitfield(0).await, vec![false]);
+
+        ctx.have.lock().await[0][0] = true;
+        assert_eq!(ctx.our_bitfield(0).await, vec![true]);
+    }
 }
