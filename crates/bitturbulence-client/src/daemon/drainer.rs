@@ -185,9 +185,8 @@ pub async fn run_peer_downloader(
         for slot in slots.values_mut() {
             if slot.active_block.is_none() {
                 if let Some(task) = ctx.sched.pick_block(&peer_avail, endgame_mode).await {
-                    let key = (task.fi, task.pi, task.bi);
+                    slot.active_block = Some(task.clone());
                     let _ = slot.task_tx.send(task).await;
-                    slot.active_block = Some(key);
                 }
             }
         }
@@ -211,13 +210,12 @@ pub async fn run_peer_downloader(
                             )
                             .instrument(Span::current()),
                         );
-                        let key = (task.fi, task.pi, task.bi);
                         let mut slot = StreamSlot {
                             task_tx,
                             active_block: None,
                         };
+                        slot.active_block = Some(task.clone());
                         let _ = slot.task_tx.send(task).await;
-                        slot.active_block = Some(key);
                         slots.insert(id, slot);
                         debug!(
                             streams = slots.len(),
@@ -305,6 +303,22 @@ pub async fn run_peer_downloader(
                         if let Some(slot) = slots.get_mut(&stream_id) {
                             slot.active_block = None;
                         }
+                        // En modo endgame puede haber otros streams descargando
+                        // el mismo bloque. Cancelarlos para ahorrar ancho de banda.
+                        for slot in slots.values() {
+                            if let Some(ref t) = slot.active_block {
+                                if t.fi == fi && t.pi == pi && t.bi == bi {
+                                    let _ = ctrl_w
+                                        .send(Message::Cancel {
+                                            file_index: fi as u16,
+                                            piece_index: pi,
+                                            begin: t.begin,
+                                            length: t.length,
+                                        })
+                                        .await;
+                                }
+                            }
+                        }
                         let piece_ready = ctx.sched.block_done(fi, pi, bi, hash).await;
                         if piece_ready {
                             ctx.verify_and_complete(fi, pi).await;
@@ -325,8 +339,8 @@ pub async fn run_peer_downloader(
                     }
                     Some(StreamResult::StreamDead { stream_id }) => {
                         if let Some(slot) = slots.remove(&stream_id) {
-                            if let Some((fi, pi, bi)) = slot.active_block {
-                                ctx.sched.block_failed(fi, pi, bi).await;
+                            if let Some(ref t) = slot.active_block {
+                                ctx.sched.block_failed(t.fi, t.pi, t.bi).await;
                                 // Un stream muerto es inestabilidad, igual que un BlockFail.
                                 recent_fails += 1;
                             }

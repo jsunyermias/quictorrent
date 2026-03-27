@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
@@ -84,11 +85,18 @@ pub(super) enum StreamResult {
     StreamDead { stream_id: usize },
 }
 
+/// Conjunto de bloques cancelados: clave (file_index, piece_index, begin).
+///
+/// Compartido entre el bucle de control del filler y los data stream workers.
+/// El control loop inserta al recibir Cancel; serve_data_stream elimina y
+/// envía Reject en lugar de Piece.
+pub(super) type CancelSet = Arc<Mutex<HashSet<(u16, u32, u32)>>>;
+
 /// Slot que representa un stream de datos activo en el coordinador.
 pub(super) struct StreamSlot {
     pub(super) task_tx: mpsc::Sender<BlockTask>,
-    /// Bloque actualmente asignado (fi, pi, bi), o None si idle.
-    pub(super) active_block: Option<(usize, u32, u32)>,
+    /// Tarea actualmente asignada, o None si idle.
+    pub(super) active_block: Option<BlockTask>,
 }
 
 // ── Stream worker: descarga un bloque a la vez ────────────────────────────────
@@ -273,7 +281,16 @@ pub(super) async fn download_stream_worker(
 
 /// Procesa `Request`s y `HashRequest`s del drainer sobre un stream de datos
 /// dedicado. Responde con `Piece`/`Reject` y `HashResponse` respectivamente.
-pub(super) async fn serve_data_stream(mut writer: W, mut reader: R, ctx: Arc<FlowCtx>) {
+///
+/// `cancel_set` es compartido con el bucle de control del filler: si el drainer
+/// envía `Cancel` para un bloque antes de que lo sirvamos, respondemos `Reject`
+/// en lugar de `Piece` para evitar transmitir datos innecesarios.
+pub(super) async fn serve_data_stream(
+    mut writer: W,
+    mut reader: R,
+    ctx: Arc<FlowCtx>,
+    cancel_set: CancelSet,
+) {
     while let Some(msg) = reader.next().await {
         match msg {
             Ok(Message::Request {
@@ -282,19 +299,65 @@ pub(super) async fn serve_data_stream(mut writer: W, mut reader: R, ctx: Arc<Flo
                 begin,
                 length,
             }) => {
+                // Comprobar si el drainer ya canceló este bloque.
+                let cancelled = cancel_set
+                    .lock()
+                    .unwrap()
+                    .remove(&(file_index, piece_index, begin));
+                if cancelled {
+                    debug!(
+                        fi = file_index,
+                        pi = piece_index,
+                        begin,
+                        "bloque cancelado — enviando Reject"
+                    );
+                    let _ = writer
+                        .send(Message::Reject {
+                            file_index,
+                            piece_index,
+                            begin,
+                            length,
+                        })
+                        .await;
+                    continue;
+                }
+
                 let fi = file_index as usize;
                 let have = ctx.our_bitfield(fi).await;
                 if have.get(piece_index as usize).copied().unwrap_or(false) {
                     match ctx.store.read_block(fi, piece_index, begin, length).await {
                         Ok(data) => {
-                            let _ = writer
-                                .send(Message::Piece {
-                                    file_index,
-                                    piece_index,
+                            // Segunda comprobación: puede haber llegado el Cancel
+                            // mientras leíamos el bloque del disco.
+                            let cancelled = cancel_set
+                                .lock()
+                                .unwrap()
+                                .remove(&(file_index, piece_index, begin));
+                            if cancelled {
+                                debug!(
+                                    fi = file_index,
+                                    pi = piece_index,
                                     begin,
-                                    data: Bytes::from(data),
-                                })
-                                .await;
+                                    "bloque cancelado tras lectura — enviando Reject"
+                                );
+                                let _ = writer
+                                    .send(Message::Reject {
+                                        file_index,
+                                        piece_index,
+                                        begin,
+                                        length,
+                                    })
+                                    .await;
+                            } else {
+                                let _ = writer
+                                    .send(Message::Piece {
+                                        file_index,
+                                        piece_index,
+                                        begin,
+                                        data: Bytes::from(data),
+                                    })
+                                    .await;
+                            }
                         }
                         Err(e) => {
                             warn!(fi, piece_index, begin, "read_block: {e}");

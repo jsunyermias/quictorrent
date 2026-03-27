@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
@@ -10,7 +11,7 @@ use bitturbulence_transport::PeerConnection;
 
 use super::context::FlowCtx;
 use super::drainer::send_our_bitfields;
-use super::stream::serve_data_stream;
+use super::stream::{serve_data_stream, CancelSet};
 use super::KEEPALIVE_INTERVAL;
 
 // ── Bucle del filler (conexión entrante) ──────────────────────────────────────
@@ -23,6 +24,10 @@ pub async fn run_peer_filler(
     // Stream 1 ya fue gestionado por handle_inbound (Hello / HelloAck).
     // Aceptamos el stream 2 como canal de control.
     let (mut ctrl_w, mut ctrl_r) = conn.accept_bidi_stream().await?;
+
+    // Conjunto compartido de bloques cancelados: el drainer envía Cancel en el
+    // canal de control; cada serve_data_stream lo comprueba antes de enviar Piece.
+    let cancel_set: CancelSet = Arc::new(Mutex::new(HashSet::new()));
 
     // Anunciar nuestra disponibilidad al drainer.
     send_our_bitfields(ctx, &mut ctrl_w).await?;
@@ -40,6 +45,17 @@ pub async fn run_peer_filler(
                     Some(Ok(Message::HaveNone  { .. }))   => {}
                     Some(Ok(Message::HaveAll   { .. }))   => {}
                     Some(Ok(Message::HaveBitmap { .. }))  => {}
+                    Some(Ok(Message::Cancel {
+                        file_index,
+                        piece_index,
+                        begin,
+                        ..
+                    })) => {
+                        cancel_set
+                            .lock()
+                            .unwrap()
+                            .insert((file_index, piece_index, begin));
+                    }
                     Some(Ok(Message::Bye { reason }))     => {
                         info!("peer bye: {reason}");
                         return Ok(());
@@ -55,7 +71,8 @@ pub async fn run_peer_filler(
                 match stream {
                     Ok((w, r)) => {
                         tokio::spawn(
-                            serve_data_stream(w, r, ctx.clone()).instrument(Span::current()),
+                            serve_data_stream(w, r, ctx.clone(), cancel_set.clone())
+                                .instrument(Span::current()),
                         );
                     }
                     Err(e) => {
