@@ -301,7 +301,9 @@ impl Message {
                 let file_index  = buf.get_u16();
                 let piece_index = buf.get_u32();
                 let count       = buf.get_u32() as usize;
-                chk(&buf, count * 32, "HashResponse.hashes")?;
+                let bytes_needed = count.checked_mul(32)
+                    .ok_or(ProtocolError::InvalidMessageLength { expected: 0, got: 0 })?;
+                chk(&buf, bytes_needed, "HashResponse.hashes")?;
                 let mut block_hashes = Vec::with_capacity(count);
                 for _ in 0..count {
                     block_hashes.push(r32(&mut buf));

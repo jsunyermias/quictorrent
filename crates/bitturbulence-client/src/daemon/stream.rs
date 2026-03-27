@@ -121,7 +121,10 @@ pub(super) async fn download_stream_worker(
                     {
                         if !block_hashes.is_empty() {
                             let computed = piece_root_from_block_hashes(&block_hashes);
-                            let expected = ctx.meta.files[fi].piece_hashes[pi as usize];
+                            let Some(&expected) = ctx.meta.files[fi].piece_hashes.get(pi as usize) else {
+                                warn!(fi, pi, "piece_index fuera de rango en metainfo");
+                                break vec![];
+                            };
                             if computed != expected {
                                 warn!(fi, pi, "HashResponse: raíz Merkle incorrecta \
                                               — filler puede estar sirviendo datos corruptos");
