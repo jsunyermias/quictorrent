@@ -4,8 +4,6 @@ Ordenados de más a menos prioritario. Actualizado: 2026-03-27.
 
 | # | Título | Prioridad |
 |---|--------|-----------|
-| [#28](https://github.com/jsunyermias/bitturbulence/issues/28) | Daemon en background + IPC Unix socket | 🟠 Media-alta |
-| [#21](https://github.com/jsunyermias/bitturbulence/issues/21) | `submarine flow create`: herramienta nativa Rust para generar `.bitflow` | 🟠 Media-alta |
 | [#26](https://github.com/jsunyermias/bitturbulence/issues/26) | Multiplexación adaptativa: ajuste de streams según endgame e inestabilidad | 🟠 Media |
 | [#32](https://github.com/jsunyermias/bitturbulence/issues/32) | Verificación Merkle incremental via HashRequest/HashResponse | 🟠 Media |
 | [#23](https://github.com/jsunyermias/bitturbulence/issues/23) | `submarine status`: progreso en tiempo real (velocidad, ETA, peers activos) | 🟡 Media-baja |
@@ -27,6 +25,8 @@ Ordenados de más a menos prioritario. Actualizado: 2026-03-27.
 
 | # | Título | Commit |
 |---|--------|--------|
+| [#28](https://github.com/jsunyermias/bitturbulence/issues/28) | Daemon en background + IPC Unix socket | 4f3f8c8 |
+| [#21](https://github.com/jsunyermias/bitturbulence/issues/21) | `submarine flow create`: herramienta nativa Rust para generar `.bitflow` | 9fd9553 |
 | — | Batería de tests: scheduler_actor, context, have_persist (154 tests total) | 779619d |
 | [#36](https://github.com/jsunyermias/bitturbulence/issues/36) | Seeder automático: pasar a modo Seeding al completar la descarga | f4c90ee |
 | [#29](https://github.com/jsunyermias/bitturbulence/issues/29) | Integrar DHT con descubrimiento de peers en el daemon | c9a8746 |
