@@ -16,8 +16,8 @@ use super::KEEPALIVE_INTERVAL;
 // ── Bucle del filler (conexión entrante) ──────────────────────────────────────
 
 pub async fn run_peer_filler(
-    conn:     &PeerConnection,
-    ctx:      &Arc<FlowCtx>,
+    conn: &PeerConnection,
+    ctx: &Arc<FlowCtx>,
     _peer_id: &[u8; 32],
 ) -> Result<()> {
     // Stream 1 ya fue gestionado por handle_inbound (Hello / HelloAck).
@@ -68,7 +68,7 @@ pub async fn run_peer_filler(
                     Ok((fi, pi)) => {
                         let _ = ctrl_w.send(Message::HavePiece {
                             file_index: fi as u16,
-                            piece_index: pi as u32,
+                            piece_index: pi,
                         }).await;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {

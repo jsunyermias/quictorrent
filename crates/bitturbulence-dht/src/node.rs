@@ -6,16 +6,12 @@ use rand::RngCore;
 use tracing::{debug, info, warn};
 
 use crate::{
-    bucket::NodeInfo,
-    error::Result,
-    message::DhtMessage,
-    node_id::NodeId,
-    store::ValueStore,
+    bucket::NodeInfo, error::Result, message::DhtMessage, node_id::NodeId, store::ValueStore,
     table::RoutingTable,
 };
 
-const _ALPHA: usize = 3;  // Paralelismo de queries Kademlia (pendiente de implementar)
-pub(crate) const K: usize = 20;  // Nodos por bucket
+const _ALPHA: usize = 3; // Paralelismo de queries Kademlia (pendiente de implementar)
+pub(crate) const K: usize = 20; // Nodos por bucket
 
 /// Configuración del nodo DHT.
 #[derive(Debug, Clone)]
@@ -31,9 +27,9 @@ pub struct DhtConfig {
 impl Default for DhtConfig {
     fn default() -> Self {
         Self {
-            bind_addr:           "0.0.0.0:6881".into(),
-            bootstrap_nodes:     Vec::new(),
-            routing_table_path:  None,
+            bind_addr: "0.0.0.0:6881".into(),
+            bootstrap_nodes: Vec::new(),
+            routing_table_path: None,
         }
     }
 }
@@ -41,16 +37,16 @@ impl Default for DhtConfig {
 /// Estado compartido del nodo DHT.
 #[derive(Debug)]
 pub(crate) struct DhtState {
-    pub(crate) table:  RoutingTable,
-    pub(crate) store:  ValueStore,
+    pub(crate) table: RoutingTable,
+    pub(crate) store: ValueStore,
     tokens: HashMap<NodeId, [u8; 8]>,
 }
 
 impl DhtState {
     pub(crate) fn new(local_id: NodeId) -> Self {
         Self {
-            table:  RoutingTable::new(local_id),
-            store:  ValueStore::new(),
+            table: RoutingTable::new(local_id),
+            store: ValueStore::new(),
             tokens: HashMap::new(),
         }
     }
@@ -63,7 +59,10 @@ impl DhtState {
     }
 
     pub(crate) fn verify_token(&self, node_id: &NodeId, token: &[u8; 8]) -> bool {
-        self.tokens.get(node_id).map(|t| t == token).unwrap_or(false)
+        self.tokens
+            .get(node_id)
+            .map(|t| t == token)
+            .unwrap_or(false)
     }
 }
 
@@ -71,7 +70,7 @@ impl DhtState {
 pub struct DhtNode {
     pub local_id: NodeId,
     pub(crate) config: DhtConfig,
-    pub(crate) state:  Arc<Mutex<DhtState>>,
+    pub(crate) state: Arc<Mutex<DhtState>>,
 }
 
 impl DhtNode {
@@ -111,46 +110,75 @@ impl DhtNode {
     /// Procesa un mensaje DHT entrante y devuelve la respuesta opcional.
     pub fn handle_message(&self, msg: DhtMessage, from_addr: &str) -> Option<DhtMessage> {
         let mut state = self.state.lock().unwrap();
-        state.table.upsert(NodeInfo::new(*msg.sender(), from_addr.to_string()));
+        state
+            .table
+            .upsert(NodeInfo::new(*msg.sender(), from_addr.to_string()));
 
         match msg {
             DhtMessage::Ping { sender } => {
                 debug!("ping from {:?}", sender);
-                Some(DhtMessage::Pong { sender: self.local_id })
+                Some(DhtMessage::Pong {
+                    sender: self.local_id,
+                })
             }
             DhtMessage::FindNode { sender: _, target } => {
                 let nodes = state.table.closest(&target, K);
-                Some(DhtMessage::Nodes { sender: self.local_id, nodes })
+                Some(DhtMessage::Nodes {
+                    sender: self.local_id,
+                    nodes,
+                })
             }
             DhtMessage::GetPeers { sender, info_hash } => {
                 let token = state.issue_token(&sender);
                 let peers = state.store.get_peers(&info_hash);
                 let nodes = if peers.is_empty() {
-                    let target = NodeId::from_bytes(&info_hash).unwrap_or_else(|_| NodeId::random());
+                    let target =
+                        NodeId::from_bytes(&info_hash).unwrap_or_else(|_| NodeId::random());
                     state.table.closest(&target, K)
                 } else {
                     vec![]
                 };
-                Some(DhtMessage::GotPeers { sender: self.local_id, token, peers, nodes })
+                Some(DhtMessage::GotPeers {
+                    sender: self.local_id,
+                    token,
+                    peers,
+                    nodes,
+                })
             }
-            DhtMessage::AnnouncePeer { sender, info_hash, token, addr } => {
+            DhtMessage::AnnouncePeer {
+                sender,
+                info_hash,
+                token,
+                addr,
+            } => {
                 if !state.verify_token(&sender, &token) {
                     warn!("invalid token from {:?}", sender);
                     return None;
                 }
                 state.store.announce_peer(info_hash, addr);
-                Some(DhtMessage::AnnounceAck { sender: self.local_id })
+                Some(DhtMessage::AnnounceAck {
+                    sender: self.local_id,
+                })
             }
-            DhtMessage::Store { sender, key, value, token } => {
+            DhtMessage::Store {
+                sender,
+                key,
+                value,
+                token,
+            } => {
                 if !state.verify_token(&sender, &token) {
                     warn!("invalid token from {:?}", sender);
                     return None;
                 }
                 state.store.put(key, value);
-                Some(DhtMessage::StoreAck { sender: self.local_id })
+                Some(DhtMessage::StoreAck {
+                    sender: self.local_id,
+                })
             }
             DhtMessage::Nodes { nodes, .. } => {
-                for n in nodes { state.table.upsert(n); }
+                for n in nodes {
+                    state.table.upsert(n);
+                }
                 None
             }
             DhtMessage::Pong { .. }
@@ -186,7 +214,9 @@ impl DhtNode {
         self.state.lock().unwrap().table.len()
     }
 
-    pub fn config(&self) -> &DhtConfig { &self.config }
+    pub fn config(&self) -> &DhtConfig {
+        &self.config
+    }
 }
 
 fn save_table(table: &RoutingTable, path: &std::path::Path) -> Result<()> {
@@ -200,7 +230,9 @@ fn load_table(path: &std::path::Path) -> Result<RoutingTable> {
     let json = std::fs::read_to_string(path)?;
     let nodes: Vec<NodeInfo> = serde_json::from_str(&json)?;
     let mut table = RoutingTable::new(NodeId::random());
-    for n in nodes { table.upsert(n); }
+    for n in nodes {
+        table.upsert(n);
+    }
     Ok(table)
 }
 
@@ -211,16 +243,18 @@ mod tests {
 
     fn make_config() -> DhtConfig {
         DhtConfig {
-            bind_addr:           "127.0.0.1:0".into(),
-            bootstrap_nodes:     vec![],
-            routing_table_path:  None,
+            bind_addr: "127.0.0.1:0".into(),
+            bootstrap_nodes: vec![],
+            routing_table_path: None,
         }
     }
 
     #[test]
     fn ping_pong() {
         let node = DhtNode::new(make_config()).unwrap();
-        let msg  = DhtMessage::Ping { sender: NodeId::random() };
+        let msg = DhtMessage::Ping {
+            sender: NodeId::random(),
+        };
         let resp = node.handle_message(msg, "127.0.0.1:9000").unwrap();
         assert!(matches!(resp, DhtMessage::Pong { .. }));
     }
@@ -229,20 +263,26 @@ mod tests {
     fn find_node_returns_nodes() {
         let node = DhtNode::new(make_config()).unwrap();
         for i in 0..5u8 {
-            node.add_node(NodeId::from_seed(&[i; 32]), format!("127.0.0.1:{}", 7000 + i as u16));
+            node.add_node(
+                NodeId::from_seed(&[i; 32]),
+                format!("127.0.0.1:{}", 7000 + i as u16),
+            );
         }
-        let msg  = DhtMessage::FindNode { sender: NodeId::random(), target: NodeId::random() };
+        let msg = DhtMessage::FindNode {
+            sender: NodeId::random(),
+            target: NodeId::random(),
+        };
         let resp = node.handle_message(msg, "127.0.0.1:9001").unwrap();
         assert!(matches!(resp, DhtMessage::Nodes { .. }));
     }
 
     #[test]
     fn announce_with_valid_token() {
-        let node      = DhtNode::new(make_config()).unwrap();
-        let sender    = NodeId::random();
+        let node = DhtNode::new(make_config()).unwrap();
+        let sender = NodeId::random();
         let info_hash = [0xABu8; 32];
 
-        let get  = DhtMessage::GetPeers { sender, info_hash };
+        let get = DhtMessage::GetPeers { sender, info_hash };
         let resp = node.handle_message(get, "127.0.0.1:9002").unwrap();
         let token = match resp {
             DhtMessage::GotPeers { token, .. } => token,
@@ -250,7 +290,10 @@ mod tests {
         };
 
         let ann = DhtMessage::AnnouncePeer {
-            sender, info_hash, token, addr: "127.0.0.1:6881".into(),
+            sender,
+            info_hash,
+            token,
+            addr: "127.0.0.1:6881".into(),
         };
         let ack = node.handle_message(ann, "127.0.0.1:9002").unwrap();
         assert!(matches!(ack, DhtMessage::AnnounceAck { .. }));
@@ -259,20 +302,25 @@ mod tests {
     #[test]
     fn announce_with_invalid_token_rejected() {
         let node = DhtNode::new(make_config()).unwrap();
-        let ann  = DhtMessage::AnnouncePeer {
-            sender: NodeId::random(), info_hash: [0u8; 32],
-            token: [0xFF; 8], addr: "127.0.0.1:6881".into(),
+        let ann = DhtMessage::AnnouncePeer {
+            sender: NodeId::random(),
+            info_hash: [0u8; 32],
+            token: [0xFF; 8],
+            addr: "127.0.0.1:6881".into(),
         };
         assert!(node.handle_message(ann, "127.0.0.1:9003").is_none());
     }
 
     #[test]
     fn save_and_load_routing_table() {
-        let dir  = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("routing.json");
 
-        let config = DhtConfig { routing_table_path: Some(path.clone()), ..make_config() };
-        let node   = DhtNode::new(config.clone()).unwrap();
+        let config = DhtConfig {
+            routing_table_path: Some(path.clone()),
+            ..make_config()
+        };
+        let node = DhtNode::new(config.clone()).unwrap();
         node.add_node(NodeId::from_seed(b"peer1"), "1.2.3.4:6881".into());
         node.add_node(NodeId::from_seed(b"peer2"), "5.6.7.8:6882".into());
         node.save_routing_table().unwrap();

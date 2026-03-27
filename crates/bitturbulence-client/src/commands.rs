@@ -1,9 +1,9 @@
-use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Context, Result};
+use std::path::{Path, PathBuf};
 
 use bitturbulence_dht::{DhtConfig, DhtNode};
 use bitturbulence_pieces::piece_root;
-use bitturbulence_protocol::{FileEntry, Metainfo, Priority, piece_length_for_size};
+use bitturbulence_protocol::{piece_length_for_size, FileEntry, Metainfo, Priority};
 use bitturbulence_tracker::server::{ServerConfig, TrackerServer};
 use bitturbulence_tracker::PeerStore;
 
@@ -23,10 +23,10 @@ pub async fn cmd_add(
     std::fs::create_dir_all(&save_path)?;
 
     // Leer el metainfo
-    let meta_bytes = std::fs::read(meta_path)
-        .with_context(|| format!("cannot read {:?}", meta_path))?;
-    let meta: bitturbulence_protocol::Metainfo = serde_json::from_slice(&meta_bytes)
-        .with_context(|| "invalid metainfo file")?;
+    let meta_bytes =
+        std::fs::read(meta_path).with_context(|| format!("cannot read {:?}", meta_path))?;
+    let meta: bitturbulence_protocol::Metainfo =
+        serde_json::from_slice(&meta_bytes).with_context(|| "invalid metainfo file")?;
 
     let info_hash_hex = hex::encode(meta.info_hash);
     let id = info_hash_hex[..8].to_string();
@@ -39,7 +39,9 @@ pub async fn cmd_add(
     }
 
     // Guardar copia del .bitflow en el directorio de configuración.
-    let torrents_dir = config.state_file.parent()
+    let torrents_dir = config
+        .state_file
+        .parent()
         .unwrap_or(Path::new("."))
         .join("flows");
     std::fs::create_dir_all(&torrents_dir)?;
@@ -49,22 +51,27 @@ pub async fn cmd_add(
 
     let total_size = meta.total_size();
     let entry = FlowEntry {
-        id:             id.clone(),
-        info_hash:      info_hash_hex,
-        name:           meta.name.clone(),
+        id: id.clone(),
+        info_hash: info_hash_hex,
+        name: meta.name.clone(),
         save_path,
-        metainfo_path:  meta_dest,
-        state:          DownloadState::Queued,
-        downloaded:     0,
+        metainfo_path: meta_dest,
+        state: DownloadState::Queued,
+        downloaded: 0,
         total_size,
-        peers:          0,
+        peers: 0,
     };
 
     state.add(entry);
     state.save(state_path)?;
 
-    println!("added flow [{}] {} ({} bytes, {} files)",
-        id, meta.name, total_size, meta.files.len());
+    println!(
+        "added flow [{}] {} ({} bytes, {} files)",
+        id,
+        meta.name,
+        total_size,
+        meta.files.len()
+    );
 
     Ok(())
 }
@@ -85,8 +92,10 @@ pub async fn cmd_status(state_path: &Path, socket_path: &Path) -> Result<()> {
         _ => vec![],
     };
 
-    println!("{:<8}  {:<30}  {:>7}  {:>6}  {:>5}  STATE",
-        "ID", "NAME", "SIZE", "PROG%", "PEERS");
+    println!(
+        "{:<8}  {:<30}  {:>7}  {:>6}  {:>5}  STATE",
+        "ID", "NAME", "SIZE", "PROG%", "PEERS"
+    );
     println!("{}", "-".repeat(72));
 
     let mut entries: Vec<_> = state.flows.values().collect();
@@ -94,14 +103,16 @@ pub async fn cmd_status(state_path: &Path, socket_path: &Path) -> Result<()> {
 
     for e in entries {
         // Preferir datos en tiempo real si el daemon está activo.
-        let (downloaded, peers, state_str) = live.iter()
+        let (downloaded, peers, state_str) = live
+            .iter()
             .find(|l| l.id == e.id)
             .map(|l| (l.downloaded, l.peers, l.state.clone()))
             .unwrap_or((e.downloaded, e.peers, e.state.to_string()));
 
         let total = if e.total_size > 0 { e.total_size } else { 1 };
-        let pct   = downloaded as f32 / total as f32 * 100.0;
-        println!("{:<8}  {:<30}  {:>7}  {:>5.1}%  {:>5}  {}",
+        let pct = downloaded as f32 / total as f32 * 100.0;
+        println!(
+            "{:<8}  {:<30}  {:>7}  {:>5.1}%  {:>5}  {}",
             e.id,
             truncate(&e.name, 30),
             format_size(e.total_size),
@@ -133,11 +144,12 @@ pub async fn cmd_start(id: &str, state_path: &Path, socket_path: &Path) -> Resul
 
     // Fallback: sin daemon.
     let mut state = ClientState::load(state_path)?;
-    let entry = state.get_mut(id)
+    let entry = state
+        .get_mut(id)
         .ok_or_else(|| anyhow!("flow '{}' not found", id))?;
 
     match &entry.state {
-        DownloadState::Seeding     => println!("[{}] already seeding", id),
+        DownloadState::Seeding => println!("[{}] already seeding", id),
         DownloadState::Downloading => println!("[{}] already downloading", id),
         _ => {
             entry.state = DownloadState::Downloading;
@@ -161,7 +173,8 @@ pub async fn cmd_pause(id: &str, state_path: &Path, socket_path: &Path) -> Resul
     }
 
     let mut state = ClientState::load(state_path)?;
-    let entry = state.get_mut(id)
+    let entry = state
+        .get_mut(id)
         .ok_or_else(|| anyhow!("flow '{}' not found", id))?;
     entry.state = DownloadState::Paused;
     println!("[{}] {} → paused", id, entry.name);
@@ -182,10 +195,14 @@ pub async fn cmd_stop(id: &str, state_path: &Path, socket_path: &Path) -> Result
     }
 
     let mut state = ClientState::load(state_path)?;
-    let name = state.get(id)
+    let name = state
+        .get(id)
         .ok_or_else(|| anyhow!("flow '{}' not found", id))?
-        .name.clone();
-    state.flows.retain(|k, v| k != id && !v.info_hash.starts_with(id));
+        .name
+        .clone();
+    state
+        .flows
+        .retain(|k, v| k != id && !v.info_hash.starts_with(id));
     state.save(state_path)?;
     println!("[{}] {} removed", id, name);
     Ok(())
@@ -194,7 +211,8 @@ pub async fn cmd_stop(id: &str, state_path: &Path, socket_path: &Path) -> Result
 /// Muestra los peers de un BitFlow (datos en tiempo real si el daemon está activo).
 pub async fn cmd_peers(id: &str, state_path: &Path, socket_path: &Path) -> Result<()> {
     let state = ClientState::load(state_path)?;
-    let entry = state.get(id)
+    let entry = state
+        .get(id)
         .ok_or_else(|| anyhow!("flow '{}' not found", id))?;
 
     let peers = match try_ipc(socket_path, &IpcRequest::FlowPeers { id: id.into() }).await {
@@ -202,7 +220,10 @@ pub async fn cmd_peers(id: &str, state_path: &Path, socket_path: &Path) -> Resul
         _ => entry.peers,
     };
 
-    println!("flow [{}] {} — {} peer(s) connected", entry.id, entry.name, peers);
+    println!(
+        "flow [{}] {} — {} peer(s) connected",
+        entry.id, entry.name, peers
+    );
     if peers == 0 {
         println!("  (no peers)");
     }
@@ -211,27 +232,31 @@ pub async fn cmd_peers(id: &str, state_path: &Path, socket_path: &Path) -> Resul
 
 /// Crea un fichero .bitflow a partir de un archivo o directorio.
 pub fn cmd_create(
-    path:     &Path,
-    name:     Option<String>,
+    path: &Path,
+    name: Option<String>,
     trackers: Vec<String>,
-    comment:  Option<String>,
+    comment: Option<String>,
     priority: Priority,
-    output:   Option<PathBuf>,
+    output: Option<PathBuf>,
 ) -> Result<()> {
-    let abs = path.canonicalize()
+    let abs = path
+        .canonicalize()
         .with_context(|| format!("resolving path {:?}", path))?;
 
-    let default_name = abs.file_name()
+    let default_name = abs
+        .file_name()
         .unwrap_or_default()
         .to_string_lossy()
         .into_owned();
     let name = name.unwrap_or(default_name);
 
     let files: Vec<FileEntry> = if abs.is_file() {
-        let data = std::fs::read(&abs)
-            .with_context(|| format!("reading {:?}", abs))?;
-        let fname = abs.file_name().unwrap_or_default()
-            .to_string_lossy().into_owned();
+        let data = std::fs::read(&abs).with_context(|| format!("reading {:?}", abs))?;
+        let fname = abs
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
         vec![build_file_entry(vec![fname], &data, priority)]
     } else if abs.is_dir() {
         let mut raw: Vec<(Vec<String>, Vec<u8>)> = vec![];
@@ -258,15 +283,12 @@ pub fn cmd_create(
     meta.info_hash = meta.compute_info_hash();
 
     let hash_hex = hex::encode(meta.info_hash);
-    let out_dir = output.unwrap_or_else(|| {
-        abs.parent().unwrap_or(Path::new(".")).to_path_buf()
-    });
+    let out_dir = output.unwrap_or_else(|| abs.parent().unwrap_or(Path::new(".")).to_path_buf());
     std::fs::create_dir_all(&out_dir)?;
     let out_path = out_dir.join(format!("{}.bitflow", &hash_hex[..8]));
 
     let json = serde_json::to_string_pretty(&meta)?;
-    std::fs::write(&out_path, &json)
-        .with_context(|| format!("writing {:?}", out_path))?;
+    std::fs::write(&out_path, &json).with_context(|| format!("writing {:?}", out_path))?;
 
     println!("created:  {}", out_path.display());
     println!("name:     {}", meta.name);
@@ -280,20 +302,21 @@ pub fn cmd_create(
 
 fn build_file_entry(path: Vec<String>, data: &[u8], priority: Priority) -> FileEntry {
     let size = data.len() as u64;
-    let pl   = piece_length_for_size(size) as usize;
+    let pl = piece_length_for_size(size) as usize;
     let piece_hashes = if data.is_empty() {
         vec![]
     } else {
-        data.chunks(pl).map(|c| piece_root(c)).collect()
+        data.chunks(pl).map(piece_root).collect()
     };
-    FileEntry { path, size, piece_hashes, priority }
+    FileEntry {
+        path,
+        size,
+        piece_hashes,
+        priority,
+    }
 }
 
-fn collect_dir_files(
-    root: &Path,
-    dir:  &Path,
-    out:  &mut Vec<(Vec<String>, Vec<u8>)>,
-) -> Result<()> {
+fn collect_dir_files(root: &Path, dir: &Path, out: &mut Vec<(Vec<String>, Vec<u8>)>) -> Result<()> {
     let mut entries: Vec<_> = std::fs::read_dir(dir)
         .with_context(|| format!("reading directory {:?}", dir))?
         .collect::<std::io::Result<_>>()
@@ -310,8 +333,7 @@ fn collect_dir_files(
                 .components()
                 .map(|c| c.as_os_str().to_string_lossy().into_owned())
                 .collect();
-            let data = std::fs::read(&p)
-                .with_context(|| format!("reading {:?}", p))?;
+            let data = std::fs::read(&p).with_context(|| format!("reading {:?}", p))?;
             out.push((components, data));
         }
     }
@@ -329,17 +351,23 @@ async fn try_ipc(socket_path: &Path, req: &IpcRequest) -> Option<IpcResponse> {
     let stream = tokio::time::timeout(
         std::time::Duration::from_millis(200),
         UnixStream::connect(socket_path),
-    ).await.ok()?.ok()?;
+    )
+    .await
+    .ok()?
+    .ok()?;
 
     let (read_half, mut write_half) = stream.into_split();
     let json = serde_json::to_string(req).ok()?;
-    write_half.write_all(format!("{json}\n").as_bytes()).await.ok()?;
+    write_half
+        .write_all(format!("{json}\n").as_bytes())
+        .await
+        .ok()?;
 
     let mut lines = BufReader::new(read_half).lines();
-    let line = tokio::time::timeout(
-        std::time::Duration::from_millis(500),
-        lines.next_line(),
-    ).await.ok()?.ok()??;
+    let line = tokio::time::timeout(std::time::Duration::from_millis(500), lines.next_line())
+        .await
+        .ok()?
+        .ok()??;
 
     serde_json::from_str(&line).ok()
 }
@@ -348,15 +376,14 @@ async fn try_ipc(socket_path: &Path, req: &IpcRequest) -> Option<IpcResponse> {
 pub async fn cmd_serve_stop(config: &Config) -> Result<()> {
     match try_ipc(&config.socket_path, &IpcRequest::Shutdown).await {
         Some(_) => println!("daemon stopped"),
-        None    => println!("daemon is not running"),
+        None => println!("daemon is not running"),
     }
     Ok(())
 }
 
 /// Relanza el propio ejecutable sin --background para correr como daemon.
 pub fn cmd_serve_background() -> Result<()> {
-    let exe = std::env::current_exe()
-        .context("getting current executable path")?;
+    let exe = std::env::current_exe().context("getting current executable path")?;
 
     // Pasar todos los args excepto --background y -d.
     let args: Vec<String> = std::env::args()
@@ -394,28 +421,33 @@ pub async fn cmd_serve(config: &Config, state_path: &Path) -> Result<()> {
 
     // DHT
     let dht_config = DhtConfig {
-        bind_addr:           format!("0.0.0.0:{}", config.listen_port),
-        bootstrap_nodes:     config.dht_bootstrap.clone(),
-        routing_table_path:  Some(config.dht_routing_table.clone()),
+        bind_addr: format!("0.0.0.0:{}", config.listen_port),
+        bootstrap_nodes: config.dht_bootstrap.clone(),
+        routing_table_path: Some(config.dht_routing_table.clone()),
     };
     let dht = DhtNode::new(dht_config)?;
     println!("  DHT node:  {}", dht.local_id);
 
     // Tracker HTTP
-    let db_path = config.state_file.parent()
+    let db_path = config
+        .state_file
+        .parent()
         .unwrap_or(Path::new("."))
         .join("tracker.db");
     let peer_store = PeerStore::open(Some(&db_path))?;
     let tracker_config = ServerConfig {
-        bind_addr:         format!("0.0.0.0:{}", config.listen_port + 1)
+        bind_addr: format!("0.0.0.0:{}", config.listen_port + 1)
             .parse()
             .context("parsing tracker bind addr")?,
-        require_auth:      config.tracker_auth_token.is_some(),
-        auth_token:        config.tracker_auth_token.clone(),
+        require_auth: config.tracker_auth_token.is_some(),
+        auth_token: config.tracker_auth_token.clone(),
         announce_interval: 1800,
-        min_interval:      60,
+        min_interval: 60,
     };
-    println!("  tracker:   http://0.0.0.0:{}/announce", config.listen_port + 1);
+    println!(
+        "  tracker:   http://0.0.0.0:{}/announce",
+        config.listen_port + 1
+    );
     println!("  QUIC:      quic://0.0.0.0:{}", config.listen_port);
     println!("\npress Ctrl+C to stop");
 
@@ -452,12 +484,14 @@ fn format_size(bytes: u64) -> String {
         b if b >= GB => format!("{:.1}G", b as f64 / GB as f64),
         b if b >= MB => format!("{:.1}M", b as f64 / MB as f64),
         b if b >= KB => format!("{:.1}K", b as f64 / KB as f64),
-        b            => format!("{}B", b),
+        b => format!("{}B", b),
     }
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max { return s.to_string(); }
+    if s.len() <= max {
+        return s.to_string();
+    }
     format!("{}…", &s[..max - 1])
 }
 
@@ -471,12 +505,25 @@ mod tests {
     fn create_single_file_produces_valid_bitflow() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("hello.bin");
-        std::fs::write(&file, b"hello world this is test data for the bitflow creator").unwrap();
+        std::fs::write(
+            &file,
+            b"hello world this is test data for the bitflow creator",
+        )
+        .unwrap();
 
         let out_dir = dir.path().join("out");
-        cmd_create(&file, None, vec![], None, Priority::Normal, Some(out_dir.clone())).unwrap();
+        cmd_create(
+            &file,
+            None,
+            vec![],
+            None,
+            Priority::Normal,
+            Some(out_dir.clone()),
+        )
+        .unwrap();
 
-        let entries: Vec<_> = std::fs::read_dir(&out_dir).unwrap()
+        let entries: Vec<_> = std::fs::read_dir(&out_dir)
+            .unwrap()
             .filter_map(|e| e.ok())
             .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("bitflow"))
             .collect();
@@ -499,17 +546,54 @@ mod tests {
 
         let out1 = dir.path().join("out1");
         let out2 = dir.path().join("out2");
-        cmd_create(&file, None, vec![], None, Priority::Normal, Some(out1.clone())).unwrap();
-        cmd_create(&file, None, vec![], None, Priority::Normal, Some(out2.clone())).unwrap();
+        cmd_create(
+            &file,
+            None,
+            vec![],
+            None,
+            Priority::Normal,
+            Some(out1.clone()),
+        )
+        .unwrap();
+        cmd_create(
+            &file,
+            None,
+            vec![],
+            None,
+            Priority::Normal,
+            Some(out2.clone()),
+        )
+        .unwrap();
 
         let meta1: Metainfo = serde_json::from_slice(
-            &std::fs::read(std::fs::read_dir(&out1).unwrap().next().unwrap().unwrap().path()).unwrap()
-        ).unwrap();
+            &std::fs::read(
+                std::fs::read_dir(&out1)
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .unwrap()
+                    .path(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
         let meta2: Metainfo = serde_json::from_slice(
-            &std::fs::read(std::fs::read_dir(&out2).unwrap().next().unwrap().unwrap().path()).unwrap()
-        ).unwrap();
+            &std::fs::read(
+                std::fs::read_dir(&out2)
+                    .unwrap()
+                    .next()
+                    .unwrap()
+                    .unwrap()
+                    .path(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
 
-        assert_eq!(meta1.info_hash, meta2.info_hash, "mismo contenido → mismo info_hash");
+        assert_eq!(
+            meta1.info_hash, meta2.info_hash,
+            "mismo contenido → mismo info_hash"
+        );
     }
 
     #[test]
@@ -522,11 +606,25 @@ mod tests {
         std::fs::write(src.join("subdir").join("c.txt"), b"archivo c").unwrap();
 
         let out = dir.path().join("out");
-        cmd_create(&src, None, vec![], None, Priority::Normal, Some(out.clone())).unwrap();
+        cmd_create(
+            &src,
+            None,
+            vec![],
+            None,
+            Priority::Normal,
+            Some(out.clone()),
+        )
+        .unwrap();
 
         let json = std::fs::read(
-            std::fs::read_dir(&out).unwrap().next().unwrap().unwrap().path()
-        ).unwrap();
+            std::fs::read_dir(&out)
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path(),
+        )
+        .unwrap();
         let meta: Metainfo = serde_json::from_slice(&json).unwrap();
 
         assert_eq!(meta.name, "mydir");
@@ -552,11 +650,18 @@ mod tests {
             Some("comentario de prueba".into()),
             Priority::High,
             Some(out.clone()),
-        ).unwrap();
+        )
+        .unwrap();
 
         let json = std::fs::read(
-            std::fs::read_dir(&out).unwrap().next().unwrap().unwrap().path()
-        ).unwrap();
+            std::fs::read_dir(&out)
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path(),
+        )
+        .unwrap();
         let meta: Metainfo = serde_json::from_slice(&json).unwrap();
 
         assert_eq!(meta.name, "mi torrent");
@@ -572,16 +677,30 @@ mod tests {
         use bitturbulence_protocol::piece_length_for_size;
 
         let data = vec![0xABu8; 32 * 1024]; // 32 KB
-        let dir  = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("data.bin");
         std::fs::write(&file, &data).unwrap();
 
         let out = dir.path().join("out");
-        cmd_create(&file, None, vec![], None, Priority::Normal, Some(out.clone())).unwrap();
+        cmd_create(
+            &file,
+            None,
+            vec![],
+            None,
+            Priority::Normal,
+            Some(out.clone()),
+        )
+        .unwrap();
 
         let json = std::fs::read(
-            std::fs::read_dir(&out).unwrap().next().unwrap().unwrap().path()
-        ).unwrap();
+            std::fs::read_dir(&out)
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path(),
+        )
+        .unwrap();
         let meta: Metainfo = serde_json::from_slice(&json).unwrap();
 
         let pl = piece_length_for_size(data.len() as u64) as usize;

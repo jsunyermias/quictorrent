@@ -30,11 +30,11 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            bind_addr:         "0.0.0.0:6969".parse().expect("valid default bind addr"),
-            require_auth:      false,
-            auth_token:        None,
+            bind_addr: "0.0.0.0:6969".parse().expect("valid default bind addr"),
+            require_auth: false,
+            auth_token: None,
             announce_interval: 1800,
-            min_interval:      60,
+            min_interval: 60,
         }
     }
 }
@@ -42,7 +42,7 @@ impl Default for ServerConfig {
 /// Servidor tracker BitTurbulence sobre QUIC.
 pub struct TrackerServer {
     config: ServerConfig,
-    store:  PeerStore,
+    store: PeerStore,
 }
 
 impl TrackerServer {
@@ -60,19 +60,14 @@ impl TrackerServer {
             if let Some(conn_result) = endpoint.accept().await {
                 match conn_result {
                     Ok(conn) => {
-                        let store  = self.store.clone();
+                        let store = self.store.clone();
                         let config = config.clone();
                         tokio::spawn(async move {
                             let qconn = conn.inner_conn().clone();
-                            loop {
-                                match qconn.accept_bi().await {
-                                    Ok((send, recv)) => {
-                                        let store  = store.clone();
-                                        let config = config.clone();
-                                        tokio::spawn(handle_request(send, recv, store, config));
-                                    }
-                                    Err(_) => break,
-                                }
+                            while let Ok((send, recv)) = qconn.accept_bi().await {
+                                let store = store.clone();
+                                let config = config.clone();
+                                tokio::spawn(handle_request(send, recv, store, config));
                             }
                         });
                     }
@@ -84,10 +79,10 @@ impl TrackerServer {
 }
 
 async fn handle_request(
-    mut send:  SendStream,
-    mut recv:  RecvStream,
-    store:     PeerStore,
-    config:    Arc<ServerConfig>,
+    mut send: SendStream,
+    mut recv: RecvStream,
+    store: PeerStore,
+    config: Arc<ServerConfig>,
 ) {
     if let Err(e) = process_request(&mut send, &mut recv, &store, &config).await {
         warn!("tracker: error procesando petición: {e}");
@@ -95,9 +90,9 @@ async fn handle_request(
 }
 
 async fn process_request(
-    send:   &mut SendStream,
-    recv:   &mut RecvStream,
-    store:  &PeerStore,
+    send: &mut SendStream,
+    recv: &mut RecvStream,
+    store: &PeerStore,
     config: &ServerConfig,
 ) -> Result<()> {
     let msg: TrackerMessage = read_frame(recv).await?;
@@ -105,24 +100,31 @@ async fn process_request(
     let response = match msg {
         TrackerMessage::Announce { auth_token, req } => {
             if !check_auth(auth_token.as_deref(), config) {
-                TrackerResponse::Error { message: "autenticación requerida".into() }
+                TrackerResponse::Error {
+                    message: "autenticación requerida".into(),
+                }
             } else {
                 match store.announce(&req) {
-                    Err(e) => TrackerResponse::Error { message: e.to_string() },
+                    Err(e) => TrackerResponse::Error {
+                        message: e.to_string(),
+                    },
                     Ok(peers) => {
                         let ih = hex::decode(&req.info_hash)
                             .ok()
                             .and_then(|b| b.try_into().ok())
                             .unwrap_or([0u8; 32]);
                         let (complete, incomplete, _) = store.scrape(&ih);
-                        let peer_list = peers.into_iter().map(|r| PeerInfo {
-                            peer_id: hex::encode(r.peer_id),
-                            addr:    r.addr,
-                        }).collect();
+                        let peer_list = peers
+                            .into_iter()
+                            .map(|r| PeerInfo {
+                                peer_id: hex::encode(r.peer_id),
+                                addr: r.addr,
+                            })
+                            .collect();
                         TrackerResponse::Announce(AnnounceResponse {
-                            interval:     config.announce_interval,
+                            interval: config.announce_interval,
                             min_interval: Some(config.min_interval),
-                            peers:        peer_list,
+                            peers: peer_list,
                             complete,
                             incomplete,
                         })
@@ -131,16 +133,25 @@ async fn process_request(
             }
         }
 
-        TrackerMessage::Scrape { auth_token, info_hash } => {
+        TrackerMessage::Scrape {
+            auth_token,
+            info_hash,
+        } => {
             if !check_auth(auth_token.as_deref(), config) {
-                TrackerResponse::Error { message: "autenticación requerida".into() }
+                TrackerResponse::Error {
+                    message: "autenticación requerida".into(),
+                }
             } else {
                 match hex::decode(&info_hash).ok().and_then(|b| b.try_into().ok()) {
-                    None => TrackerResponse::Error { message: "info_hash inválido".into() },
+                    None => TrackerResponse::Error {
+                        message: "info_hash inválido".into(),
+                    },
                     Some(ih) => {
                         let (complete, incomplete, downloaded) = store.scrape(&ih);
                         TrackerResponse::Scrape(crate::types::ScrapeResponse {
-                            complete, incomplete, downloaded,
+                            complete,
+                            incomplete,
+                            downloaded,
                         })
                     }
                 }
@@ -152,7 +163,9 @@ async fn process_request(
 }
 
 fn check_auth(token: Option<&str>, config: &ServerConfig) -> bool {
-    if !config.require_auth { return true; }
+    if !config.require_auth {
+        return true;
+    }
     match (&config.auth_token, token) {
         (Some(expected), Some(provided)) => expected == provided,
         _ => false,
@@ -172,7 +185,7 @@ async fn read_frame(recv: &mut RecvStream) -> Result<TrackerMessage> {
 
 async fn write_frame(send: &mut SendStream, resp: &TrackerResponse) -> Result<()> {
     let json = serde_json::to_vec(resp)?;
-    let len  = (json.len() as u32).to_be_bytes();
+    let len = (json.len() as u32).to_be_bytes();
     send.write_all(&len).await?;
     send.write_all(&json).await?;
     Ok(())

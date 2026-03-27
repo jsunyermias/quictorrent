@@ -13,10 +13,10 @@ use bitturbulence_transport::PeerConnection;
 
 use super::context::FlowCtx;
 use super::stream::{
-    PeerAvail, StreamResult, StreamSlot, W,
-    bitfield_to_bytes, bytes_to_bitfield, download_stream_worker,
+    bitfield_to_bytes, bytes_to_bitfield, download_stream_worker, PeerAvail, StreamResult,
+    StreamSlot, W,
 };
-use super::{DEFAULT_STREAMS, MAX_STREAMS, KEEPALIVE_INTERVAL, HELLO_TIMEOUT, PROTOCOL_VERSION};
+use super::{DEFAULT_STREAMS, HELLO_TIMEOUT, KEEPALIVE_INTERVAL, MAX_STREAMS, PROTOCOL_VERSION};
 
 // ── Helpers del coordinador ───────────────────────────────────────────────────
 
@@ -25,13 +25,17 @@ pub async fn send_our_bitfields(ctx: &FlowCtx, ctrl_w: &mut W) -> Result<()> {
     for fi in 0..ctx.meta.files.len() {
         let bits = ctx.our_bitfield(fi).await;
         let msg = if bits.iter().all(|&h| h) {
-            Message::HaveAll  { file_index: fi as u16 }
+            Message::HaveAll {
+                file_index: fi as u16,
+            }
         } else if bits.iter().all(|&h| !h) {
-            Message::HaveNone { file_index: fi as u16 }
+            Message::HaveNone {
+                file_index: fi as u16,
+            }
         } else {
             Message::HaveBitmap {
                 file_index: fi as u16,
-                bitmap:     bytes::Bytes::from(bitfield_to_bytes(&bits)),
+                bitmap: bytes::Bytes::from(bitfield_to_bytes(&bits)),
             }
         };
         ctrl_w.send(msg).await?;
@@ -55,29 +59,36 @@ const INSTABILITY_RESET_WINDOW: u32 = 32;
 // ── Handshake saliente ────────────────────────────────────────────────────────
 
 async fn outbound_handshake(
-    conn:    &PeerConnection,
-    ctx:     &FlowCtx,
+    conn: &PeerConnection,
+    ctx: &FlowCtx,
     peer_id: &[u8; 32],
 ) -> Result<()> {
     use bitturbulence_protocol::AuthPayload;
 
     let (mut hello_w, mut hello_r) = conn.open_bidi_stream().await?;
 
-    hello_w.send(Message::Hello {
-        version:   PROTOCOL_VERSION,
-        peer_id:   *peer_id,
-        info_hash: ctx.meta.info_hash,
-        auth:      AuthPayload::None,
-    }).await.context("sending hello")?;
+    hello_w
+        .send(Message::Hello {
+            version: PROTOCOL_VERSION,
+            peer_id: *peer_id,
+            info_hash: ctx.meta.info_hash,
+            auth: AuthPayload::None,
+        })
+        .await
+        .context("sending hello")?;
 
-    let ack = tokio::time::timeout(HELLO_TIMEOUT, hello_r.next()).await
+    let ack = tokio::time::timeout(HELLO_TIMEOUT, hello_r.next())
+        .await
         .map_err(|_| anyhow!("hello ack timeout"))?
         .ok_or_else(|| anyhow!("disconnected during hello"))??;
 
     match ack {
         Message::HelloAck { accepted: true, .. } => Ok(()),
-        Message::HelloAck { accepted: false, reason, .. } =>
-            Err(anyhow!("hello rejected: {}", reason.unwrap_or_default())),
+        Message::HelloAck {
+            accepted: false,
+            reason,
+            ..
+        } => Err(anyhow!("hello rejected: {}", reason.unwrap_or_default())),
         _ => Err(anyhow!("expected HelloAck")),
     }
 }
@@ -85,8 +96,8 @@ async fn outbound_handshake(
 // ── Bucle del drainer (conexión saliente) ─────────────────────────────────────
 
 pub async fn run_peer_downloader(
-    conn:    &PeerConnection,
-    ctx:     &Arc<FlowCtx>,
+    conn: &PeerConnection,
+    ctx: &Arc<FlowCtx>,
     peer_id: &[u8; 32],
 ) -> Result<()> {
     outbound_handshake(conn, ctx, peer_id).await?;
@@ -96,7 +107,7 @@ pub async fn run_peer_downloader(
     send_our_bitfields(ctx, &mut ctrl_w).await?;
 
     // ── Comprobar si el flow ya está completo antes de abrir streams ────
-    let mut complete_rx   = ctx.complete_tx.subscribe();
+    let mut complete_rx = ctx.complete_tx.subscribe();
     let mut have_piece_rx = ctx.have_piece_tx.subscribe();
     if *complete_rx.borrow() {
         return Ok(());
@@ -113,9 +124,20 @@ pub async fn run_peer_downloader(
         let (w, r) = conn.open_bidi_stream().await?;
         let (task_tx, task_rx) = mpsc::channel::<BlockTask>(1);
         tokio::spawn(download_stream_worker(
-            next_id, w, r, task_rx, result_tx.clone(), ctx.clone(),
+            next_id,
+            w,
+            r,
+            task_rx,
+            result_tx.clone(),
+            ctx.clone(),
         ));
-        slots.insert(next_id, StreamSlot { task_tx, active_block: None });
+        slots.insert(
+            next_id,
+            StreamSlot {
+                task_tx,
+                active_block: None,
+            },
+        );
         next_id += 1;
     }
 
@@ -124,7 +146,7 @@ pub async fn run_peer_downloader(
 
     // Contadores para detección de inestabilidad.
     let mut recent_fails: u32 = 0;
-    let mut blocks_ok:    u32 = 0;
+    let mut blocks_ok: u32 = 0;
 
     // ── Bucle coordinador ──────────────────────────────────────────────
     loop {
@@ -134,10 +156,14 @@ pub async fn run_peer_downloader(
         //   Normal   : DEFAULT_STREAMS, solo bloques Pending.
         //   Endgame  : MAX_STREAMS, también bloques InFlight (redundancia).
         //   Inestable: igual que endgame (compensa fallos de red).
-        let unstable    = recent_fails >= INSTABILITY_FAIL_THRESHOLD;
-        let endgame     = ctx.sched.total_pending().await <= ENDGAME_THRESHOLD;
+        let unstable = recent_fails >= INSTABILITY_FAIL_THRESHOLD;
+        let endgame = ctx.sched.total_pending().await <= ENDGAME_THRESHOLD;
         let endgame_mode = unstable || endgame;
-        let max_active  = if endgame_mode { MAX_STREAMS } else { DEFAULT_STREAMS };
+        let max_active = if endgame_mode {
+            MAX_STREAMS
+        } else {
+            DEFAULT_STREAMS
+        };
 
         // ─ Scale-down: cerrar slots idle si superamos max_active ──────
         //
@@ -179,17 +205,24 @@ pub async fn run_peer_downloader(
                         next_id += 1;
                         let (task_tx, task_rx) = mpsc::channel::<BlockTask>(1);
                         tokio::spawn(download_stream_worker(
-                            id, w, r, task_rx, result_tx.clone(), ctx.clone(),
+                            id,
+                            w,
+                            r,
+                            task_rx,
+                            result_tx.clone(),
+                            ctx.clone(),
                         ));
                         let key = (task.fi, task.pi, task.bi);
-                        let mut slot = StreamSlot { task_tx, active_block: None };
+                        let mut slot = StreamSlot {
+                            task_tx,
+                            active_block: None,
+                        };
                         let _ = slot.task_tx.send(task).await;
                         slot.active_block = Some(key);
                         slots.insert(id, slot);
                         debug!(
                             streams = slots.len(),
-                            endgame, unstable,
-                            "scaled up data streams"
+                            endgame, unstable, "scaled up data streams"
                         );
                     }
                     Err(e) => {
@@ -316,7 +349,7 @@ pub async fn run_peer_downloader(
                     Ok((fi, pi)) => {
                         let _ = ctrl_w.send(Message::HavePiece {
                             file_index: fi as u16,
-                            piece_index: pi as u32,
+                            piece_index: pi,
                         }).await;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {

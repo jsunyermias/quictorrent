@@ -5,7 +5,10 @@ pub mod store;
 pub mod types;
 
 pub use client::TrackerClient;
-pub use error::{TrackerError, Result};
+pub use error::{Result, TrackerError};
 pub use server::{ServerConfig, TrackerServer};
 pub use store::PeerStore;
-pub use types::{AnnounceEvent, AnnounceRequest, AnnounceResponse, PeerInfo, ScrapeResponse, TrackerMessage, TrackerResponse};
+pub use types::{
+    AnnounceEvent, AnnounceRequest, AnnounceResponse, PeerInfo, ScrapeResponse, TrackerMessage,
+    TrackerResponse,
+};

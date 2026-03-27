@@ -137,10 +137,7 @@ mod tests {
         let c = [3u8; 32];
         let zero = [0u8; 32];
 
-        let expected = merkle_parent(
-            &merkle_parent(&a, &b),
-            &merkle_parent(&c, &zero),
-        );
+        let expected = merkle_parent(&merkle_parent(&a, &b), &merkle_parent(&c, &zero));
         assert_eq!(merkle_root(&[a, b, c]), expected);
     }
 

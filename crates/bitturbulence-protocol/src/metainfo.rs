@@ -1,22 +1,29 @@
-use sha2::{Digest, Sha256};
 use crate::priority::Priority;
+use sha2::{Digest, Sha256};
 
 /// Raíz Merkle de un slice de hashes de 32 bytes.
 /// Rellena a la siguiente potencia de 2 con `[0u8; 32]` (igual que BT v2).
 fn merkle_root_of_slices(hashes: &[[u8; 32]]) -> [u8; 32] {
-    if hashes.is_empty() { return [0u8; 32]; }
-    if hashes.len() == 1 { return hashes[0]; }
+    if hashes.is_empty() {
+        return [0u8; 32];
+    }
+    if hashes.len() == 1 {
+        return hashes[0];
+    }
     let n = hashes.len().next_power_of_two();
     let mut layer: Vec<[u8; 32]> = Vec::with_capacity(n);
     layer.extend_from_slice(hashes);
     layer.resize(n, [0u8; 32]);
     while layer.len() > 1 {
-        layer = layer.chunks(2).map(|p| {
-            let mut h = Sha256::new();
-            h.update(p[0]);
-            h.update(p[1]);
-            h.finalize().into()
-        }).collect();
+        layer = layer
+            .chunks(2)
+            .map(|p| {
+                let mut h = Sha256::new();
+                h.update(p[0]);
+                h.update(p[1]);
+                h.finalize().into()
+            })
+            .collect();
     }
     layer[0]
 }
@@ -57,11 +64,15 @@ pub fn piece_length_for_size(file_size: u64) -> u32 {
     const GB: u64 = 1024 * MB;
     const TB: u64 = 1024 * GB;
 
-    const MIN_PIECE: u64 = 64 * KB;  // 4 bloques
-    const MAX_PIECE: u64 = GB;       // 65536 bloques
+    const MIN_PIECE: u64 = 64 * KB; // 4 bloques
+    const MAX_PIECE: u64 = GB; // 65536 bloques
 
-    if file_size == 0 { return MIN_PIECE as u32; }
-    if file_size >= TB { return MAX_PIECE as u32; }
+    if file_size == 0 {
+        return MIN_PIECE as u32;
+    }
+    if file_size >= TB {
+        return MAX_PIECE as u32;
+    }
 
     // next_pow2(file_size / 2048), acotado a [64 KB, 512 MB].
     let raw = (file_size / 2048).max(1);
@@ -73,7 +84,9 @@ pub fn piece_length_for_size(file_size: u64) -> u32 {
 
 /// Número de piezas para un archivo dado su tamaño y el tamaño de pieza.
 pub fn num_pieces(file_size: u64, piece_length: u32) -> u32 {
-    if file_size == 0 { return 0; }
+    if file_size == 0 {
+        return 0;
+    }
     file_size.div_ceil(piece_length as u64) as u32
 }
 
@@ -121,9 +134,15 @@ impl FileEntry {
 
     /// Longitud real de la última pieza (puede ser menor que piece_length).
     pub fn last_piece_length(&self) -> u32 {
-        if self.num_pieces() == 0 { return 0; }
+        if self.num_pieces() == 0 {
+            return 0;
+        }
         let rem = (self.size % self.piece_length() as u64) as u32;
-        if rem == 0 { self.piece_length() } else { rem }
+        if rem == 0 {
+            self.piece_length()
+        } else {
+            rem
+        }
     }
 
     /// Raíz Merkle del archivo: raíz Merkle de todas las raíces de pieza.
@@ -203,19 +222,19 @@ mod tests {
     #[test]
     fn piece_length_ranges() {
         // Mínimo: 64 KB (4 bloques de 16 KB)
-        assert_eq!(piece_length_for_size(0),          64 * KB as u32);  // caso especial
-        assert_eq!(piece_length_for_size(KB),          KB as u32);       // < 64 KB → capped al tamaño
-        assert_eq!(piece_length_for_size(64 * KB),    64 * KB as u32);  // ≤ 128 MB → 64 KB
+        assert_eq!(piece_length_for_size(0), 64 * KB as u32); // caso especial
+        assert_eq!(piece_length_for_size(KB), KB as u32); // < 64 KB → capped al tamaño
+        assert_eq!(piece_length_for_size(64 * KB), 64 * KB as u32); // ≤ 128 MB → 64 KB
 
         // ~2048 piezas en cada límite de tramo
-        assert_eq!(piece_length_for_size(128 * MB),   64 * KB as u32);
-        assert_eq!(piece_length_for_size(256 * MB),  128 * KB as u32);
-        assert_eq!(piece_length_for_size(512 * MB),  256 * KB as u32);
-        assert_eq!(piece_length_for_size(GB),         512 * KB as u32);
-        assert_eq!(piece_length_for_size(2   * GB),    1 * MB as u32);
-        assert_eq!(piece_length_for_size(16  * GB),    8 * MB as u32);
-        assert_eq!(piece_length_for_size(128 * GB),   64 * MB as u32);
-        assert_eq!(piece_length_for_size(512 * GB),  256 * MB as u32);
+        assert_eq!(piece_length_for_size(128 * MB), 64 * KB as u32);
+        assert_eq!(piece_length_for_size(256 * MB), 128 * KB as u32);
+        assert_eq!(piece_length_for_size(512 * MB), 256 * KB as u32);
+        assert_eq!(piece_length_for_size(GB), 512 * KB as u32);
+        assert_eq!(piece_length_for_size(2 * GB), 1 * MB as u32);
+        assert_eq!(piece_length_for_size(16 * GB), 8 * MB as u32);
+        assert_eq!(piece_length_for_size(128 * GB), 64 * MB as u32);
+        assert_eq!(piece_length_for_size(512 * GB), 256 * MB as u32);
 
         // Cap: ≥ 1 TB → 1 GB (65536 bloques)
         assert_eq!(piece_length_for_size(1024 * GB), 1024 * MB as u32);
@@ -223,11 +242,15 @@ mod tests {
 
     #[test]
     fn piece_length_always_multiple_of_block_size() {
-        for size in [1u64, KB, 64*KB, MB, 256*MB, GB, 16*GB, 1024*GB] {
+        for size in [1u64, KB, 64 * KB, MB, 256 * MB, GB, 16 * GB, 1024 * GB] {
             let pl = piece_length_for_size(size);
             // Para archivos >= BLOCK_SIZE el resultado debe ser múltiplo de BLOCK_SIZE.
             if size >= BLOCK_SIZE as u64 {
-                assert_eq!(pl % BLOCK_SIZE, 0, "size={size} pl={pl} no es múltiplo de BLOCK_SIZE");
+                assert_eq!(
+                    pl % BLOCK_SIZE,
+                    0,
+                    "size={size} pl={pl} no es múltiplo de BLOCK_SIZE"
+                );
             }
         }
     }
@@ -298,30 +321,33 @@ mod tests {
         use Priority::*;
 
         let specs: &[(&[&str], u64, Priority)] = &[
-            (&["readme.txt"],                          1,              Maximum),
-            (&["docs", "CHANGELOG.md"],                100,            VeryHigh),
-            (&["config.toml"],                         512,            Higher),
-            (&["assets", "icon.png"],                  16 * KB,        High),
-            (&["data", "sample.bin"],                  64 * KB,        Normal),
-            (&["cache", "index.bin"],                  64 * KB + 1,    Low),
-            (&["src", "bundle.js"],                    MB,             Lower),
-            (&["dist", "app.wasm"],                    5 * MB,         VeryLow),
-            (&["dist", "app.wasm.map"],                5 * MB + 999,   Minimum),
-            (&["video", "intro.mp4"],                  128 * MB,       Maximum),
-            (&["video", "main.mp4"],                   256 * MB + 1,   VeryHigh),
-            (&["backup", "snapshot.tar"],              GB,             Higher),
-            (&["media", "archive", "full.tar.gz"],     2 * GB,         High),
+            (&["readme.txt"], 1, Maximum),
+            (&["docs", "CHANGELOG.md"], 100, VeryHigh),
+            (&["config.toml"], 512, Higher),
+            (&["assets", "icon.png"], 16 * KB, High),
+            (&["data", "sample.bin"], 64 * KB, Normal),
+            (&["cache", "index.bin"], 64 * KB + 1, Low),
+            (&["src", "bundle.js"], MB, Lower),
+            (&["dist", "app.wasm"], 5 * MB, VeryLow),
+            (&["dist", "app.wasm.map"], 5 * MB + 999, Minimum),
+            (&["video", "intro.mp4"], 128 * MB, Maximum),
+            (&["video", "main.mp4"], 256 * MB + 1, VeryHigh),
+            (&["backup", "snapshot.tar"], GB, Higher),
+            (&["media", "archive", "full.tar.gz"], 2 * GB, High),
         ];
 
-        let files: Vec<FileEntry> = specs.iter().map(|(path, size, prio)| {
-            FileEntry::new(path.iter().map(|s| s.to_string()).collect(), *size, *prio)
-        }).collect();
+        let files: Vec<FileEntry> = specs
+            .iter()
+            .map(|(path, size, prio)| {
+                FileEntry::new(path.iter().map(|s| s.to_string()).collect(), *size, *prio)
+            })
+            .collect();
 
         let mut meta = Metainfo {
-            name:      "test-multifile-flow".into(),
+            name: "test-multifile-flow".into(),
             info_hash: [0u8; 32],
             files,
-            trackers:  vec![
+            trackers: vec![
                 "https://tracker.example.com/announce".into(),
                 "udp://tracker2.example.com:6969/announce".into(),
             ],
@@ -349,9 +375,8 @@ mod tests {
         use Priority::*;
         let meta = make_13_file_meta();
         let expected = [
-            Maximum, VeryHigh, Higher, High, Normal,
-            Low, Lower, VeryLow, Minimum,
-            Maximum, VeryHigh, Higher, High,
+            Maximum, VeryHigh, Higher, High, Normal, Low, Lower, VeryLow, Minimum, Maximum,
+            VeryHigh, Higher, High,
         ];
         for (fi, (&exp, file)) in expected.iter().zip(meta.files.iter()).enumerate() {
             assert_eq!(file.priority, exp, "fi={fi}");
@@ -360,10 +385,19 @@ mod tests {
 
     #[test]
     fn multifile_13_total_size() {
-        let expected = 1 + 100 + 512
-            + 16 * KB + 64 * KB + (64 * KB + 1)
-            + MB + 5 * MB + (5 * MB + 999)
-            + 128 * MB + (256 * MB + 1) + GB + 2 * GB;
+        let expected = 1
+            + 100
+            + 512
+            + 16 * KB
+            + 64 * KB
+            + (64 * KB + 1)
+            + MB
+            + 5 * MB
+            + (5 * MB + 999)
+            + 128 * MB
+            + (256 * MB + 1)
+            + GB
+            + 2 * GB;
         assert_eq!(make_13_file_meta().total_size(), expected);
     }
 
@@ -439,7 +473,7 @@ mod tests {
     #[test]
     fn multifile_13_nested_paths_preserved() {
         let meta = make_13_file_meta();
-        assert_eq!(meta.files[1].path,  vec!["docs", "CHANGELOG.md"]);
+        assert_eq!(meta.files[1].path, vec!["docs", "CHANGELOG.md"]);
         assert_eq!(meta.files[10].path, vec!["video", "main.mp4"]);
         assert_eq!(meta.files[12].path, vec!["media", "archive", "full.tar.gz"]);
     }
@@ -450,16 +484,16 @@ mod tests {
         let json = serde_json::to_string_pretty(&meta).expect("serializar");
         let restored: Metainfo = serde_json::from_str(&json).expect("deserializar");
 
-        assert_eq!(restored.name,      meta.name);
+        assert_eq!(restored.name, meta.name);
         assert_eq!(restored.info_hash, meta.info_hash);
-        assert_eq!(restored.trackers,  meta.trackers);
-        assert_eq!(restored.comment,   meta.comment);
+        assert_eq!(restored.trackers, meta.trackers);
+        assert_eq!(restored.comment, meta.comment);
         assert_eq!(restored.files.len(), meta.files.len());
 
         for (fi, (orig, rest)) in meta.files.iter().zip(restored.files.iter()).enumerate() {
-            assert_eq!(orig.path,         rest.path,         "path fi={fi}");
-            assert_eq!(orig.size,         rest.size,         "size fi={fi}");
-            assert_eq!(orig.priority,     rest.priority,     "priority fi={fi}");
+            assert_eq!(orig.path, rest.path, "path fi={fi}");
+            assert_eq!(orig.size, rest.size, "size fi={fi}");
+            assert_eq!(orig.priority, rest.priority, "priority fi={fi}");
             assert_eq!(orig.piece_hashes, rest.piece_hashes, "piece_hashes fi={fi}");
         }
     }

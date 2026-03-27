@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingRequest {
-    pub file_index:  u16,
+    pub file_index: u16,
     pub piece_index: u32,
-    pub begin:       u32,
-    pub length:      u32,
+    pub begin: u32,
+    pub length: u32,
 }
 
 /// Estado de disponibilidad de piezas de un archivo remoto.
@@ -20,9 +20,9 @@ pub enum FileAvailability {
 impl FileAvailability {
     pub fn has_piece(&self, index: u32) -> bool {
         match self {
-            Self::HaveAll      => true,
-            Self::HaveNone     => false,
-            Self::Unknown      => false,
+            Self::HaveAll => true,
+            Self::HaveNone => false,
+            Self::Unknown => false,
             Self::Bitmap(bits) => bits.get(index as usize).copied().unwrap_or(false),
         }
     }
@@ -57,14 +57,17 @@ impl SessionState {
     }
 
     pub fn apply_have_piece(&mut self, file_index: u16, piece_index: u32) {
-        let entry = self.files
+        let entry = self
+            .files
             .entry(file_index)
             .or_insert(FileAvailability::HaveNone);
         match entry {
             FileAvailability::HaveAll => {}
             FileAvailability::Bitmap(bits) => {
                 let idx = piece_index as usize;
-                if idx >= bits.len() { bits.resize(idx + 1, false); }
+                if idx >= bits.len() {
+                    bits.resize(idx + 1, false);
+                }
                 bits[idx] = true;
             }
             _ => {
@@ -82,7 +85,8 @@ impl SessionState {
                 bits.push((byte >> bit) & 1 == 1);
             }
         }
-        self.files.insert(file_index, FileAvailability::Bitmap(bits));
+        self.files
+            .insert(file_index, FileAvailability::Bitmap(bits));
     }
 
     pub fn peer_has_piece(&self, file_index: u16, piece_index: u32) -> bool {
@@ -144,7 +148,12 @@ mod tests {
     #[test]
     fn pending_add_and_remove() {
         let mut s = SessionState::new(1);
-        s.add_pending(PendingRequest { file_index: 0, piece_index: 3, begin: 0, length: 4096 });
+        s.add_pending(PendingRequest {
+            file_index: 0,
+            piece_index: 3,
+            begin: 0,
+            length: 4096,
+        });
         assert_eq!(s.pending.len(), 1);
         s.remove_pending(0, 3, 0);
         assert!(s.pending.is_empty());

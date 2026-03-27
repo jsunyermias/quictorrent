@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use bitturbulence_protocol::{BLOCK_SIZE, Priority};
-    use crate::scheduler::{BlockScheduler, types::{BlockState, MAX_STREAMS_PER_BLOCK}};
+    use crate::scheduler::{
+        types::{BlockState, MAX_STREAMS_PER_BLOCK},
+        BlockScheduler,
+    };
+    use bitturbulence_protocol::{Priority, BLOCK_SIZE};
 
     const PL: u32 = 4 * BLOCK_SIZE; // 64 KiB = 4 bloques
 
@@ -37,7 +40,11 @@ mod tests {
 
         let tasks: Vec<_> = (0..4).map(|_| s.schedule(&peer).unwrap()).collect();
         let blocks: std::collections::HashSet<u32> = tasks.iter().map(|t| t.bi).collect();
-        assert_eq!(blocks.len(), 4, "4 streams deben cubrir 4 bloques distintos");
+        assert_eq!(
+            blocks.len(),
+            4,
+            "4 streams deben cubrir 4 bloques distintos"
+        );
 
         let t5 = s.schedule(&peer).unwrap();
         match s.block_state[0][t5.bi as usize] {
@@ -52,7 +59,9 @@ mod tests {
         s.add_peer_bitfield(&[true]);
         let peer = vec![true];
 
-        for _ in 0..MAX_STREAMS_PER_BLOCK { let _ = s.schedule(&peer); }
+        for _ in 0..MAX_STREAMS_PER_BLOCK {
+            let _ = s.schedule(&peer);
+        }
         s.mark_block_done(0, 1, [0u8; 32]);
         s.mark_block_done(0, 2, [0u8; 32]);
         s.mark_block_done(0, 3, [0u8; 32]);
@@ -65,14 +74,17 @@ mod tests {
                 other => panic!("esperado InFlight({expected_n}), got {other:?}"),
             }
         }
-        assert!(s.schedule(&peer).is_none(), "no debe asignar más allá de MAX");
+        assert!(
+            s.schedule(&peer).is_none(),
+            "no debe asignar más allá de MAX"
+        );
     }
 
     #[test]
     fn rarest_first_ordering() {
         let mut s = sched(3);
-        s.add_peer_bitfield(&[true,  true,  true]);
-        s.add_peer_bitfield(&[true,  false, true]);
+        s.add_peer_bitfield(&[true, true, true]);
+        s.add_peer_bitfield(&[true, false, true]);
         s.add_peer_bitfield(&[false, false, true]);
         let peer = vec![true, true, true];
         let t = s.schedule(&peer).unwrap();
@@ -100,7 +112,9 @@ mod tests {
         s.add_peer_bitfield(&[true]);
         let peer = vec![true];
 
-        for _ in 0..4 { s.schedule(&peer); }
+        for _ in 0..4 {
+            s.schedule(&peer);
+        }
         assert!(s.schedule_pending(&peer).is_none());
     }
 
@@ -124,7 +138,10 @@ mod tests {
         s.add_peer_bitfield(&[true]);
         let peer = vec![true];
 
-        for bi in 0u32..4 { s.schedule(&peer); s.mark_block_done(0, bi, [0u8; 32]); }
+        for bi in 0u32..4 {
+            s.schedule(&peer);
+            s.mark_block_done(0, bi, [0u8; 32]);
+        }
         assert!(s.piece_verifying[0]);
 
         s.mark_piece_hash_failed(0);
@@ -145,7 +162,9 @@ mod tests {
     #[test]
     fn seeder_init_is_complete() {
         let mut s = sched(3);
-        for pi in 0..3u32 { s.mark_piece_verified(pi); }
+        for pi in 0..3u32 {
+            s.mark_piece_verified(pi);
+        }
         assert!(s.is_complete());
         assert_eq!(s.progress(), 1.0);
     }
@@ -180,7 +199,7 @@ mod tests {
 
     #[test]
     fn pending_blocks_counts_only_pending() {
-        let mut s = sched(2);  // 2 piezas × 4 bloques = 8 bloques totales
+        let mut s = sched(2); // 2 piezas × 4 bloques = 8 bloques totales
         s.add_peer_bitfield(&[true, true]);
         let peer = vec![true, true];
 
@@ -194,11 +213,11 @@ mod tests {
 
         // Un bloque Done tampoco cuenta.
         s.mark_block_done(0, 0, [0u8; 32]); // bi=0 → Done
-        assert_eq!(s.pending_blocks(), 6);  // bi=1 InFlight, bi=0 Done: sigue siendo 6
+        assert_eq!(s.pending_blocks(), 6); // bi=1 InFlight, bi=0 Done: sigue siendo 6
 
         // Completar toda la pieza 0 y verificarla:
         // resetear bi=1 a Pending para poder completarlo limpiamente
-        s.mark_block_failed(0, 1);          // bi=1 → Pending
+        s.mark_block_failed(0, 1); // bi=1 → Pending
         for bi in 0u32..4 {
             if s.block_state[0][bi as usize] == BlockState::Pending {
                 s.schedule(&peer);
@@ -217,7 +236,10 @@ mod tests {
         let mut s = sched(1);
         s.add_peer_bitfield(&[true]);
         let peer = vec![true];
-        for bi in 0u32..4 { s.schedule(&peer); s.mark_block_done(0, bi, [0u8; 32]); }
+        for bi in 0u32..4 {
+            s.schedule(&peer);
+            s.mark_block_done(0, bi, [0u8; 32]);
+        }
         s.mark_piece_verified(0);
         assert_eq!(s.pending_blocks(), 0);
     }

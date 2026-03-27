@@ -22,6 +22,6 @@ pub mod wire;
 pub use auth::AuthPayload;
 pub use error::{ProtocolError, Result};
 pub use info_hash::InfoHash;
-pub use metainfo::{FileEntry, Metainfo, num_pieces, piece_length_for_size, BLOCK_SIZE};
+pub use metainfo::{num_pieces, piece_length_for_size, FileEntry, Metainfo, BLOCK_SIZE};
 pub use priority::Priority;
 pub use wire::{Message, MessageCodec, PROTOCOL_VERSION};

@@ -3,8 +3,8 @@
 //! Formato: un fichero JSON `{save_path}/.have.json`
 //! Contenido: `[[bool]]` — have[fi][pi]
 
-use std::path::Path;
 use anyhow::{Context, Result};
+use std::path::Path;
 
 /// Guarda el bitfield have en `{save_path}/.have.json`.
 pub fn save_have(save_path: &Path, have: &[Vec<bool>]) -> Result<()> {
@@ -18,7 +18,9 @@ pub fn save_have(save_path: &Path, have: &[Vec<bool>]) -> Result<()> {
 /// Si el fichero no existe, devuelve `None`.
 pub fn load_have(save_path: &Path) -> Result<Option<Vec<Vec<bool>>>> {
     let path = save_path.join(".have.json");
-    if !path.exists() { return Ok(None); }
+    if !path.exists() {
+        return Ok(None);
+    }
     let json = std::fs::read_to_string(&path).context("reading .have.json")?;
     let have: Vec<Vec<bool>> = serde_json::from_str(&json).context("parsing .have.json")?;
     Ok(Some(have))
@@ -57,7 +59,10 @@ mod tests {
     fn load_corrupted_json_returns_error() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(".have.json"), b"not valid json {{{{").unwrap();
-        assert!(load_have(dir.path()).is_err(), "JSON malformado debe devolver error");
+        assert!(
+            load_have(dir.path()).is_err(),
+            "JSON malformado debe devolver error"
+        );
     }
 
     #[test]

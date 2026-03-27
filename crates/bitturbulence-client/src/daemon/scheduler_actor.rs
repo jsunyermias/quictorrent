@@ -37,14 +37,14 @@ const LOW_AVAIL: u32 = 1;
 /// Cada entrada es `(prioridad_mínima_del_archivo, máx_disponibilidad_permitida)`.
 /// `None` en el segundo campo deshabilita el filtro de rareza.
 pub(super) const PRIORITY_PASSES: &[(Priority, Option<u32>)] = &[
-    (Priority::Maximum, Some(LOW_AVAIL)),   // 1. Máxima + rareza
-    (Priority::VeryHigh, Some(LOW_AVAIL)),  // 2. Muy alta + rareza
-    (Priority::Maximum, None),              // 3. Máxima
-    (Priority::Higher, Some(LOW_AVAIL)),    // 4. Más alta + rareza
-    (Priority::VeryHigh, None),             // 5. Muy alta
-    (Priority::High, Some(LOW_AVAIL)),      // 6. Alta + rareza
-    (Priority::Higher, None),               // 7. Más alta
-    (Priority::High, None),                 // 8. Alta
+    (Priority::Maximum, Some(LOW_AVAIL)),  // 1. Máxima + rareza
+    (Priority::VeryHigh, Some(LOW_AVAIL)), // 2. Muy alta + rareza
+    (Priority::Maximum, None),             // 3. Máxima
+    (Priority::Higher, Some(LOW_AVAIL)),   // 4. Más alta + rareza
+    (Priority::VeryHigh, None),            // 5. Muy alta
+    (Priority::High, Some(LOW_AVAIL)),     // 6. Alta + rareza
+    (Priority::Higher, None),              // 7. Más alta
+    (Priority::High, None),                // 8. Alta
 ];
 
 // ── Mensajes ──────────────────────────────────────────────────────────────────
@@ -55,15 +55,21 @@ enum Msg {
     /// `endgame=true` habilita los passes 10-11 (bloques `InFlight`).
     PickBlock {
         peer_avail: Vec<PeerAvail>,
-        endgame:    bool,
-        reply:      oneshot::Sender<Option<BlockTask>>,
+        endgame: bool,
+        reply: oneshot::Sender<Option<BlockTask>>,
     },
     /// Número total de bloques `Pending` en todos los archivos.
     TotalPending { reply: oneshot::Sender<u32> },
     /// Marca el bloque como completo y almacena su hash SHA-256.
     /// Devuelve `true` si es el primer stream en completar todos los bloques
     /// de la pieza (señal para iniciar la verificación Merkle).
-    BlockDone { fi: usize, pi: u32, bi: u32, hash: [u8; 32], reply: oneshot::Sender<bool> },
+    BlockDone {
+        fi: usize,
+        pi: u32,
+        bi: u32,
+        hash: [u8; 32],
+        reply: oneshot::Sender<bool>,
+    },
     /// Decrementa el contador in-flight de un bloque (fallo o stream muerto).
     BlockFailed { fi: usize, pi: u32, bi: u32 },
     /// Registra el bitfield de disponibilidad de un peer al conectar.
@@ -75,7 +81,11 @@ enum Msg {
 
     // ── Context (verify_and_complete / is_complete) ───────────────────────────
     /// Devuelve los hashes SHA-256 de todos los bloques de la pieza `pi`.
-    PieceBlockHashes { fi: usize, pi: u32, reply: oneshot::Sender<Option<Vec<[u8; 32]>>> },
+    PieceBlockHashes {
+        fi: usize,
+        pi: u32,
+        reply: oneshot::Sender<Option<Vec<[u8; 32]>>>,
+    },
     /// Marca la pieza como verificada y descargada completamente.
     MarkPieceVerified { fi: usize, pi: u32 },
     /// La verificación Merkle ha fallado: resetea todos los bloques a `Pending`.
@@ -109,13 +119,20 @@ impl SchedulerHandle {
     ///
     /// `endgame`: cuando es `true`, incluye bloques `InFlight` (passes 10-11)
     /// para redundancia en modo endgame o inestabilidad.
-    pub(crate) async fn pick_block(&self, peer_avail: &[PeerAvail], endgame: bool) -> Option<BlockTask> {
+    pub(crate) async fn pick_block(
+        &self,
+        peer_avail: &[PeerAvail],
+        endgame: bool,
+    ) -> Option<BlockTask> {
         let (tx, rx) = oneshot::channel();
-        let _ = self.tx.send(Msg::PickBlock {
-            peer_avail: peer_avail.to_vec(),
-            endgame,
-            reply: tx,
-        }).await;
+        let _ = self
+            .tx
+            .send(Msg::PickBlock {
+                peer_avail: peer_avail.to_vec(),
+                endgame,
+                reply: tx,
+            })
+            .await;
         rx.await.unwrap_or(None)
     }
 
@@ -130,7 +147,16 @@ impl SchedulerHandle {
     /// Devuelve `true` si todos los bloques de la pieza están `Done`.
     pub(crate) async fn block_done(&self, fi: usize, pi: u32, bi: u32, hash: [u8; 32]) -> bool {
         let (tx, rx) = oneshot::channel();
-        let _ = self.tx.send(Msg::BlockDone { fi, pi, bi, hash, reply: tx }).await;
+        let _ = self
+            .tx
+            .send(Msg::BlockDone {
+                fi,
+                pi,
+                bi,
+                hash,
+                reply: tx,
+            })
+            .await;
         rx.await.unwrap_or(false)
     }
 
@@ -159,7 +185,10 @@ impl SchedulerHandle {
     /// Devuelve los hashes SHA-256 de todos los bloques de la pieza `pi`.
     pub(crate) async fn piece_block_hashes(&self, fi: usize, pi: u32) -> Option<Vec<[u8; 32]>> {
         let (tx, rx) = oneshot::channel();
-        let _ = self.tx.send(Msg::PieceBlockHashes { fi, pi, reply: tx }).await;
+        let _ = self
+            .tx
+            .send(Msg::PieceBlockHashes { fi, pi, reply: tx })
+            .await;
         rx.await.unwrap_or(None)
     }
 
@@ -186,7 +215,11 @@ impl SchedulerHandle {
 async fn run_actor(mut schedulers: Vec<BlockScheduler>, mut rx: mpsc::Receiver<Msg>) {
     while let Some(msg) = rx.recv().await {
         match msg {
-            Msg::PickBlock { peer_avail, endgame, reply } => {
+            Msg::PickBlock {
+                peer_avail,
+                endgame,
+                reply,
+            } => {
                 let task = pick_block_sync(&mut schedulers, &peer_avail, endgame);
                 let _ = reply.send(task);
             }
@@ -194,33 +227,52 @@ async fn run_actor(mut schedulers: Vec<BlockScheduler>, mut rx: mpsc::Receiver<M
                 let n: u32 = schedulers.iter().map(|s| s.pending_blocks()).sum();
                 let _ = reply.send(n);
             }
-            Msg::BlockDone { fi, pi, bi, hash, reply } => {
-                let ready = schedulers.get_mut(fi)
+            Msg::BlockDone {
+                fi,
+                pi,
+                bi,
+                hash,
+                reply,
+            } => {
+                let ready = schedulers
+                    .get_mut(fi)
                     .map(|s| s.mark_block_done(pi, bi, hash))
                     .unwrap_or(false);
                 let _ = reply.send(ready);
             }
             Msg::BlockFailed { fi, pi, bi } => {
-                if let Some(s) = schedulers.get_mut(fi) { s.mark_block_failed(pi, bi); }
+                if let Some(s) = schedulers.get_mut(fi) {
+                    s.mark_block_failed(pi, bi);
+                }
             }
             Msg::AddPeerBitfield { fi, bits } => {
-                if let Some(s) = schedulers.get_mut(fi) { s.add_peer_bitfield(&bits); }
+                if let Some(s) = schedulers.get_mut(fi) {
+                    s.add_peer_bitfield(&bits);
+                }
             }
             Msg::RemovePeerBitfield { fi, bits } => {
-                if let Some(s) = schedulers.get_mut(fi) { s.remove_peer_bitfield(&bits); }
+                if let Some(s) = schedulers.get_mut(fi) {
+                    s.remove_peer_bitfield(&bits);
+                }
             }
             Msg::AddPeerHave { fi, pi } => {
-                if let Some(s) = schedulers.get_mut(fi) { s.add_peer_have(pi); }
+                if let Some(s) = schedulers.get_mut(fi) {
+                    s.add_peer_have(pi);
+                }
             }
             Msg::PieceBlockHashes { fi, pi, reply } => {
                 let hashes = schedulers.get(fi).and_then(|s| s.piece_block_hashes(pi));
                 let _ = reply.send(hashes);
             }
             Msg::MarkPieceVerified { fi, pi } => {
-                if let Some(s) = schedulers.get_mut(fi) { s.mark_piece_verified(pi); }
+                if let Some(s) = schedulers.get_mut(fi) {
+                    s.mark_piece_verified(pi);
+                }
             }
             Msg::MarkPieceHashFailed { fi, pi } => {
-                if let Some(s) = schedulers.get_mut(fi) { s.mark_piece_hash_failed(pi); }
+                if let Some(s) = schedulers.get_mut(fi) {
+                    s.mark_piece_hash_failed(pi);
+                }
             }
             Msg::IsComplete { reply } => {
                 let ok = schedulers.iter().all(|s| s.is_complete());
@@ -247,7 +299,10 @@ mod tests {
     #[tokio::test]
     async fn is_complete_with_no_schedulers() {
         let handle = SchedulerHandle::spawn(vec![]);
-        assert!(handle.is_complete().await, "sin schedulers = completo vacío");
+        assert!(
+            handle.is_complete().await,
+            "sin schedulers = completo vacío"
+        );
     }
 
     #[tokio::test]
@@ -265,7 +320,10 @@ mod tests {
         let handle = make_handle(1);
         // 1 pieza × 1 bloque → block_done con bi=0 devuelve true
         let ready = handle.block_done(0, 0, 0, [0xABu8; 32]).await;
-        assert!(ready, "pieza de un solo bloque debe estar lista inmediatamente");
+        assert!(
+            ready,
+            "pieza de un solo bloque debe estar lista inmediatamente"
+        );
     }
 
     #[tokio::test]
@@ -300,7 +358,10 @@ mod tests {
         let handle = make_handle(2);
         let avail = vec![PeerAvail::HaveAll];
         let task = handle.pick_block(&avail, false).await;
-        assert!(task.is_some(), "peer con todas las piezas → hay tarea disponible");
+        assert!(
+            task.is_some(),
+            "peer con todas las piezas → hay tarea disponible"
+        );
     }
 
     #[tokio::test]
@@ -333,31 +394,55 @@ fn pick_block_sync(
     // Passes 1–8: Pending × prioridad alta × rareza.
     for &(prio, max_avail) in PRIORITY_PASSES {
         for (fi, avail) in peer_avail.iter().enumerate() {
-            let Some(sched) = schedulers.get_mut(fi) else { continue };
-            if sched.priority() != prio { continue; }
-            if max_avail.is_some_and(|m| sched.min_availability() > m) { continue; }
+            let Some(sched) = schedulers.get_mut(fi) else {
+                continue;
+            };
+            if sched.priority() != prio {
+                continue;
+            }
+            if max_avail.is_some_and(|m| sched.min_availability() > m) {
+                continue;
+            }
             let bits = avail.as_bitfield(sched.num_pieces());
-            if bits.iter().all(|&h| !h) { continue; }
-            if let Some(task) = sched.schedule_pending(&bits) { return Some(task); }
+            if bits.iter().all(|&h| !h) {
+                continue;
+            }
+            if let Some(task) = sched.schedule_pending(&bits) {
+                return Some(task);
+            }
         }
     }
 
     // Pass 9: Pending de archivos con prioridad Normal o inferior.
     for (fi, avail) in peer_avail.iter().enumerate() {
-        let Some(sched) = schedulers.get_mut(fi) else { continue };
-        if sched.priority() >= Priority::High { continue; }
+        let Some(sched) = schedulers.get_mut(fi) else {
+            continue;
+        };
+        if sched.priority() >= Priority::High {
+            continue;
+        }
         let bits = avail.as_bitfield(sched.num_pieces());
-        if bits.iter().all(|&h| !h) { continue; }
-        if let Some(task) = sched.schedule_pending(&bits) { return Some(task); }
+        if bits.iter().all(|&h| !h) {
+            continue;
+        }
+        if let Some(task) = sched.schedule_pending(&bits) {
+            return Some(task);
+        }
     }
 
     // Passes 10–11: InFlight (redundancia/endgame).
     if endgame {
         for (fi, avail) in peer_avail.iter().enumerate() {
-            let Some(sched) = schedulers.get_mut(fi) else { continue };
+            let Some(sched) = schedulers.get_mut(fi) else {
+                continue;
+            };
             let bits = avail.as_bitfield(sched.num_pieces());
-            if bits.iter().all(|&h| !h) { continue; }
-            if let Some(task) = sched.schedule(&bits) { return Some(task); }
+            if bits.iter().all(|&h| !h) {
+                continue;
+            }
+            if let Some(task) = sched.schedule(&bits) {
+                return Some(task);
+            }
         }
     }
 

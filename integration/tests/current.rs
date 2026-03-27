@@ -26,7 +26,10 @@
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::{Arc, atomic::{AtomicUsize, Ordering}},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -36,10 +39,11 @@ use tempfile::TempDir;
 use tokio::sync::Mutex;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
-use bitturbulence_pieces::{BlockScheduler, BlockTask, TorrentStore, hash_block, piece_root, file_root, verify_piece};
+use bitturbulence_pieces::{
+    file_root, hash_block, piece_root, verify_piece, BlockScheduler, BlockTask, TorrentStore,
+};
 use bitturbulence_protocol::{
-    AuthPayload, FileEntry, Message, MessageCodec, Metainfo, Priority,
-    BLOCK_SIZE, PROTOCOL_VERSION,
+    AuthPayload, FileEntry, Message, MessageCodec, Metainfo, Priority, BLOCK_SIZE, PROTOCOL_VERSION,
 };
 use bitturbulence_transport::{PeerConnection, QuicEndpoint};
 
@@ -68,23 +72,23 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(120);
 /// Cuántas piezas tiene cada peer al inicio.
 fn initial_pieces(peer: usize) -> usize {
     match peer {
-        0 => NUM_PIECES,        // 100%
-        1 => NUM_PIECES / 2,    // 50%
+        0 => NUM_PIECES,          // 100%
+        1 => NUM_PIECES / 2,      // 50%
         2 => NUM_PIECES * 3 / 10, // 30%
-        _ => 0,                 // 0%
+        _ => 0,                   // 0%
     }
 }
 
 // ── Estado compartido de un peer ──────────────────────────────────────────────
 
 struct PeerState {
-    store:      TorrentStore,
-    scheduler:  Mutex<BlockScheduler>,
-    have:       Mutex<Vec<bool>>,
+    store: TorrentStore,
+    scheduler: Mutex<BlockScheduler>,
+    have: Mutex<Vec<bool>>,
     /// Piezas verificadas correctamente.
-    verified:   AtomicUsize,
+    verified: AtomicUsize,
     piece_hashes: Vec<[u8; 32]>,
-    info_hash:  [u8; 32],
+    info_hash: [u8; 32],
     /// Directorio temporal (necesitamos mantenerlo vivo).
     _dir: TempDir,
 }
@@ -129,8 +133,8 @@ impl PeerState {
 /// Genera los datos y hashes de todas las piezas.
 /// Los datos son deterministas (basados en el índice de pieza).
 fn generate_pieces() -> (Vec<Vec<u8>>, Vec<[u8; 32]>, [u8; 32]) {
-    let mut pieces   = Vec::with_capacity(NUM_PIECES);
-    let mut hashes   = Vec::with_capacity(NUM_PIECES);
+    let mut pieces = Vec::with_capacity(NUM_PIECES);
+    let mut hashes = Vec::with_capacity(NUM_PIECES);
 
     for pi in 0..NUM_PIECES {
         // Datos deterministas: byte = (pi * 7 + i) % 251
@@ -149,11 +153,11 @@ fn generate_pieces() -> (Vec<Vec<u8>>, Vec<[u8; 32]>, [u8; 32]) {
 // ── Inicialización de un peer ──────────────────────────────────────────────────
 
 async fn init_peer(
-    peer_idx:     usize,
-    pieces:       &[Vec<u8>],
-    hashes:       &[[u8; 32]],
-    info_hash:    [u8; 32],
-    meta:         &Metainfo,
+    peer_idx: usize,
+    pieces: &[Vec<u8>],
+    hashes: &[[u8; 32]],
+    info_hash: [u8; 32],
+    meta: &Metainfo,
 ) -> Arc<PeerState> {
     let dir = TempDir::new().unwrap();
     let store = TorrentStore::open(dir.path(), meta).await.unwrap();
@@ -161,9 +165,9 @@ async fn init_peer(
     let initial = initial_pieces(peer_idx);
     let is_filler = initial == NUM_PIECES;
 
-    let piece_len  = meta.files[0].piece_length();
+    let piece_len = meta.files[0].piece_length();
     let last_piece = meta.files[0].last_piece_length();
-    let mut sched  = BlockScheduler::new(0, NUM_PIECES, piece_len, last_piece);
+    let mut sched = BlockScheduler::new(0, NUM_PIECES, piece_len, last_piece);
 
     let mut have = vec![false; NUM_PIECES];
 
@@ -174,7 +178,15 @@ async fn init_peer(
         let mut offset = 0u32;
         while offset < data.len() as u32 {
             let chunk_len = BLOCK_SIZE.min(data.len() as u32 - offset);
-            store.write_block(0, pi as u32, offset, &data[offset as usize..(offset + chunk_len) as usize]).await.unwrap();
+            store
+                .write_block(
+                    0,
+                    pi as u32,
+                    offset,
+                    &data[offset as usize..(offset + chunk_len) as usize],
+                )
+                .await
+                .unwrap();
             offset += chunk_len;
         }
         sched.mark_piece_verified(pi as u32);
@@ -202,7 +214,7 @@ async fn init_peer(
 async fn handle_seeder_stream(
     conn_send: quinn::SendStream,
     conn_recv: quinn::RecvStream,
-    state:     Arc<PeerState>,
+    state: Arc<PeerState>,
 ) {
     let mut writer = FramedWrite::new(conn_send, MessageCodec);
     let mut reader = FramedRead::new(conn_recv, MessageCodec);
@@ -210,29 +222,52 @@ async fn handle_seeder_stream(
     loop {
         match reader.next().await {
             None | Some(Err(_)) => break,
-            Some(Ok(Message::Request { file_index, piece_index, begin, length })) => {
+            Some(Ok(Message::Request {
+                file_index,
+                piece_index,
+                begin,
+                length,
+            })) => {
                 let have = state.have.lock().await;
-                let pi   = piece_index as usize;
+                let pi = piece_index as usize;
                 if have.get(pi).copied().unwrap_or(false) {
                     drop(have);
-                    match state.store.read_block(file_index as usize, piece_index, begin, length).await {
+                    match state
+                        .store
+                        .read_block(file_index as usize, piece_index, begin, length)
+                        .await
+                    {
                         Ok(data) => {
-                            let _ = writer.send(Message::Piece {
-                                file_index, piece_index, begin,
-                                data: Bytes::from(data),
-                            }).await;
+                            let _ = writer
+                                .send(Message::Piece {
+                                    file_index,
+                                    piece_index,
+                                    begin,
+                                    data: Bytes::from(data),
+                                })
+                                .await;
                         }
                         Err(_) => {
-                            let _ = writer.send(Message::Reject {
-                                file_index, piece_index, begin, length,
-                            }).await;
+                            let _ = writer
+                                .send(Message::Reject {
+                                    file_index,
+                                    piece_index,
+                                    begin,
+                                    length,
+                                })
+                                .await;
                         }
                     }
                 } else {
                     drop(have);
-                    let _ = writer.send(Message::Reject {
-                        file_index, piece_index, begin, length,
-                    }).await;
+                    let _ = writer
+                        .send(Message::Reject {
+                            file_index,
+                            piece_index,
+                            begin,
+                            length,
+                        })
+                        .await;
                 }
             }
             Some(Ok(_)) => {}
@@ -251,23 +286,35 @@ async fn accept_loop(endpoint: Arc<QuicEndpoint>, state: Arc<PeerState>) {
                 let state2 = state.clone();
                 tokio::spawn(async move {
                     // Stream de handshake
-                    let Ok((mut hello_w, mut hello_r)) = conn.accept_bidi_stream().await else { return };
+                    let Ok((mut hello_w, mut hello_r)) = conn.accept_bidi_stream().await else {
+                        return;
+                    };
                     let hello_w2 = &mut hello_w;
                     let hello_r2 = &mut hello_r;
 
                     // Leer Hello
                     let msg = hello_r2.next().await;
-                    let Some(Ok(Message::Hello { info_hash, .. })) = msg else { return };
-                    if info_hash != state2.info_hash { return; }
+                    let Some(Ok(Message::Hello { info_hash, .. })) = msg else {
+                        return;
+                    };
+                    if info_hash != state2.info_hash {
+                        return;
+                    }
 
                     // Enviar HelloAck
                     let peer_id = [0x53u8; 32];
-                    let _ = hello_w2.send(Message::HelloAck {
-                        peer_id, accepted: true, reason: None,
-                    }).await;
+                    let _ = hello_w2
+                        .send(Message::HelloAck {
+                            peer_id,
+                            accepted: true,
+                            reason: None,
+                        })
+                        .await;
 
                     // Stream de control: enviar disponibilidad y aceptar data streams
-                    let Ok((mut ctrl_w, _ctrl_r)) = conn.accept_bidi_stream().await else { return };
+                    let Ok((mut ctrl_w, _ctrl_r)) = conn.accept_bidi_stream().await else {
+                        return;
+                    };
 
                     let bits = state2.our_bitfield().await;
                     let msg = if bits.iter().all(|&h| h) {
@@ -277,7 +324,9 @@ async fn accept_loop(endpoint: Arc<QuicEndpoint>, state: Arc<PeerState>) {
                     } else {
                         let mut bytes = vec![0u8; bits.len().div_ceil(8)];
                         for (i, &has) in bits.iter().enumerate() {
-                            if has { bytes[i / 8] |= 0x80 >> (i % 8); }
+                            if has {
+                                bytes[i / 8] |= 0x80 >> (i % 8);
+                            }
                         }
                         Message::HaveBitmap {
                             file_index: 0,
@@ -290,7 +339,11 @@ async fn accept_loop(endpoint: Arc<QuicEndpoint>, state: Arc<PeerState>) {
                     loop {
                         match conn.accept_bidi_stream().await {
                             Ok((w, r)) => {
-                                tokio::spawn(handle_seeder_stream(w.into_inner(), r.into_inner(), state2.clone()));
+                                tokio::spawn(handle_seeder_stream(
+                                    w.into_inner(),
+                                    r.into_inner(),
+                                    state2.clone(),
+                                ));
                             }
                             Err(_) => break,
                         }
@@ -303,26 +356,28 @@ async fn accept_loop(endpoint: Arc<QuicEndpoint>, state: Arc<PeerState>) {
 
 // ── Descarga desde un filler ───────────────────────────────────────────────────
 
-async fn download_from_peer(
-    conn:     PeerConnection,
-    state:    Arc<PeerState>,
-    peer_id:  [u8; 32],
-) {
+async fn download_from_peer(conn: PeerConnection, state: Arc<PeerState>, peer_id: [u8; 32]) {
     // Handshake
-    let Ok((mut hello_w, mut hello_r)) = conn.open_bidi_stream().await else { return };
+    let Ok((mut hello_w, mut hello_r)) = conn.open_bidi_stream().await else {
+        return;
+    };
 
-    let _ = hello_w.send(Message::Hello {
-        version:   PROTOCOL_VERSION,
-        peer_id,
-        info_hash: state.info_hash,
-        auth:      AuthPayload::None,
-    }).await;
+    let _ = hello_w
+        .send(Message::Hello {
+            version: PROTOCOL_VERSION,
+            peer_id,
+            info_hash: state.info_hash,
+            auth: AuthPayload::None,
+        })
+        .await;
 
     // Esperar HelloAck
     loop {
         match hello_r.next().await {
             Some(Ok(Message::HelloAck { accepted: true, .. })) => break,
-            Some(Ok(Message::HelloAck { accepted: false, .. })) => return,
+            Some(Ok(Message::HelloAck {
+                accepted: false, ..
+            })) => return,
             Some(Ok(_)) => continue,
             _ => return,
         }
@@ -331,7 +386,9 @@ async fn download_from_peer(
     drop(hello_r);
 
     // Stream de control: recibir disponibilidad del filler
-    let Ok((mut ctrl_w, mut ctrl_r)) = conn.open_bidi_stream().await else { return };
+    let Ok((mut ctrl_w, mut ctrl_r)) = conn.open_bidi_stream().await else {
+        return;
+    };
 
     // Anunciar nuestra disponibilidad al filler
     let our_bits = state.our_bitfield().await;
@@ -340,7 +397,9 @@ async fn download_from_peer(
     } else {
         let mut bytes = vec![0u8; our_bits.len().div_ceil(8)];
         for (i, &has) in our_bits.iter().enumerate() {
-            if has { bytes[i / 8] |= 0x80 >> (i % 8); }
+            if has {
+                bytes[i / 8] |= 0x80 >> (i % 8);
+            }
         }
         Message::HaveBitmap {
             file_index: 0,
@@ -356,7 +415,11 @@ async fn download_from_peer(
             Some(Ok(Message::HaveNone { .. })) => return, // filler no tiene nada
             Some(Ok(Message::HaveBitmap { bitmap, .. })) => {
                 let bits: Vec<bool> = (0..NUM_PIECES)
-                    .map(|i| bitmap.get(i / 8).is_some_and(|b| (b >> (7 - (i % 8))) & 1 == 1))
+                    .map(|i| {
+                        bitmap
+                            .get(i / 8)
+                            .is_some_and(|b| (b >> (7 - (i % 8))) & 1 == 1)
+                    })
                     .collect();
                 break bits;
             }
@@ -378,7 +441,16 @@ async fn download_from_peer(
         // Abrir nuevos streams hasta el límite mientras haya bloques pendientes
         while active_streams < STREAMS_PER_CONN {
             let task_opt = state.scheduler.lock().await.schedule_pending(&seeder_bits);
-            let Some(BlockTask { fi, pi, bi, begin, length }) = task_opt else { break };
+            let Some(BlockTask {
+                fi,
+                pi,
+                bi,
+                begin,
+                length,
+            }) = task_opt
+            else {
+                break;
+            };
 
             let Ok((w, r)) = conn.open_bidi_stream().await else {
                 state.scheduler.lock().await.mark_block_failed(pi, bi);
@@ -386,7 +458,7 @@ async fn download_from_peer(
             };
 
             let result_tx2 = result_tx.clone();
-            let state2     = state.clone();
+            let state2 = state.clone();
             active_streams += 1;
             _total_requested += 1;
 
@@ -394,25 +466,33 @@ async fn download_from_peer(
                 let mut writer = FramedWrite::new(w.into_inner(), MessageCodec);
                 let mut reader = FramedRead::new(r.into_inner(), MessageCodec);
 
-                let ok = if writer.send(Message::Request {
-                    file_index: fi as u16,
-                    piece_index: pi,
-                    begin,
-                    length,
-                }).await.is_ok() {
+                let ok = if writer
+                    .send(Message::Request {
+                        file_index: fi as u16,
+                        piece_index: pi,
+                        begin,
+                        length,
+                    })
+                    .await
+                    .is_ok()
+                {
                     loop {
                         match reader.next().await {
-                            Some(Ok(Message::Piece { piece_index, begin: b, data, .. }))
-                                if piece_index == pi && b == begin =>
-                            {
-                                let wrote = state2.store
-                                    .write_block(fi, pi, begin, &data)
-                                    .await
-                                    .is_ok();
+                            Some(Ok(Message::Piece {
+                                piece_index,
+                                begin: b,
+                                data,
+                                ..
+                            })) if piece_index == pi && b == begin => {
+                                let wrote =
+                                    state2.store.write_block(fi, pi, begin, &data).await.is_ok();
                                 break wrote;
                             }
-                            Some(Ok(Message::Reject { piece_index, begin: b, .. }))
-                                if piece_index == pi && b == begin => break false,
+                            Some(Ok(Message::Reject {
+                                piece_index,
+                                begin: b,
+                                ..
+                            })) if piece_index == pi && b == begin => break false,
                             None | Some(Err(_)) => break false,
                             _ => continue,
                         }
@@ -431,11 +511,17 @@ async fn download_from_peer(
         }
 
         // Esperar resultado de un stream
-        let Some((pi, bi, ok)) = result_rx.recv().await else { break };
+        let Some((pi, bi, ok)) = result_rx.recv().await else {
+            break;
+        };
         active_streams -= 1;
 
         if ok {
-            let piece_done = state.scheduler.lock().await.mark_block_done(pi, bi, [0u8; 32]);
+            let piece_done = state
+                .scheduler
+                .lock()
+                .await
+                .mark_block_done(pi, bi, [0u8; 32]);
             if piece_done {
                 state.verify_piece_and_mark(pi).await;
             }
@@ -445,7 +531,11 @@ async fn download_from_peer(
     }
 
     // Quitar aportación del filler al scheduler
-    state.scheduler.lock().await.remove_peer_bitfield(&seeder_bits);
+    state
+        .scheduler
+        .lock()
+        .await
+        .remove_peer_bitfield(&seeder_bits);
 }
 
 // ── Test principal ────────────────────────────────────────────────────────────
@@ -460,18 +550,16 @@ async fn current_8_peers_mixed_availability() {
     let (pieces, hashes, info_hash) = generate_pieces();
 
     let meta = Metainfo {
-        name:      "current-test".into(),
+        name: "current-test".into(),
         info_hash,
-        files: vec![
-            FileEntry {
-                path:         vec!["data.bin".into()],
-                size:         FILE_SIZE,
-                piece_hashes: hashes.clone(),
-                priority:     Priority::Normal,
-            }
-        ],
+        files: vec![FileEntry {
+            path: vec!["data.bin".into()],
+            size: FILE_SIZE,
+            piece_hashes: hashes.clone(),
+            priority: Priority::Normal,
+        }],
         trackers: vec![],
-        comment:  None,
+        comment: None,
     };
 
     // ── Inicializar peers ──────────────────────────────────────────────────
@@ -484,10 +572,10 @@ async fn current_8_peers_mixed_availability() {
     // ── Vincular endpoints QUIC ────────────────────────────────────────────
     let bind: SocketAddr = "127.0.0.1:0".parse().unwrap();
     let mut endpoints: Vec<Arc<QuicEndpoint>> = Vec::with_capacity(NUM_PEERS);
-    let mut addrs:     Vec<SocketAddr>         = Vec::with_capacity(NUM_PEERS);
+    let mut addrs: Vec<SocketAddr> = Vec::with_capacity(NUM_PEERS);
 
     for _ in 0..NUM_PEERS {
-        let ep   = Arc::new(QuicEndpoint::bind(bind).unwrap());
+        let ep = Arc::new(QuicEndpoint::bind(bind).unwrap());
         let addr = ep.local_addr().unwrap();
         endpoints.push(ep);
         addrs.push(addr);
@@ -515,8 +603,8 @@ async fn current_8_peers_mixed_availability() {
 
     let sources: HashMap<usize, Vec<usize>> = {
         let mut m = HashMap::new();
-        m.insert(1, vec![0]);       // Peer 1 descarga de Peer 0
-        m.insert(2, vec![0]);       // Peer 2 descarga de Peer 0
+        m.insert(1, vec![0]); // Peer 1 descarga de Peer 0
+        m.insert(2, vec![0]); // Peer 2 descarga de Peer 0
         for p in 3..NUM_PEERS {
             m.insert(p, vec![0, 1, 2]); // Leechers descargan de 0, 1 y 2
         }
@@ -525,16 +613,16 @@ async fn current_8_peers_mixed_availability() {
 
     for (&downloader, fillers) in &sources {
         for &filler in fillers {
-            let state  = states[downloader].clone();
-            let ep     = endpoints[downloader].clone();
-            let addr   = addrs[filler];
+            let state = states[downloader].clone();
+            let ep = endpoints[downloader].clone();
+            let addr = addrs[filler];
             let mut peer_id = [0u8; 32];
             peer_id[0] = downloader as u8;
 
             let task = tokio::spawn(async move {
                 match ep.connect(addr).await {
                     Ok(conn) => download_from_peer(conn, state, peer_id).await,
-                    Err(e)   => eprintln!("connect {downloader}→{filler}: {e:?}"),
+                    Err(e) => eprintln!("connect {downloader}→{filler}: {e:?}"),
                 }
             });
             download_tasks.push(task);
@@ -555,17 +643,24 @@ async fn current_8_peers_mixed_availability() {
                 }
                 done
             };
-            if all_done { break; }
+            if all_done {
+                break;
+            }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
-    }).await;
+    })
+    .await;
 
     // ── Resultado ──────────────────────────────────────────────────────────
     for task in download_tasks {
         task.await.ok();
     }
 
-    assert!(result.is_ok(), "timeout: no todos los peers completaron en {}s", TEST_TIMEOUT.as_secs());
+    assert!(
+        result.is_ok(),
+        "timeout: no todos los peers completaron en {}s",
+        TEST_TIMEOUT.as_secs()
+    );
 
     // ── Verificar integridad final de todos los peers ──────────────────────
     for (i, state) in states.iter().enumerate() {
@@ -578,7 +673,10 @@ async fn current_8_peers_mixed_availability() {
 
         // Verificar SHA-256 de cada pieza en disco
         for pi in 0..NUM_PIECES as u32 {
-            let data = state.store.read_piece(0, pi).await
+            let data = state
+                .store
+                .read_piece(0, pi)
+                .await
                 .unwrap_or_else(|_| panic!("peer {i}: no se pudo leer pieza {pi}"));
             assert!(
                 verify_piece(&data, &hashes[pi as usize]),

@@ -16,7 +16,7 @@ pub enum IpcRequest {
     /// Pausa la descarga de un flow.
     FlowPause { id: String },
     /// Elimina un flow de la lista.
-    FlowStop  { id: String },
+    FlowStop { id: String },
     /// Número de peers conectados a un flow.
     FlowPeers { id: String },
     /// Comprueba que el daemon está vivo.
@@ -44,13 +44,13 @@ pub enum IpcResponse {
 /// Información en tiempo real de un flow activo.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpcFlowInfo {
-    pub id:         String,
-    pub name:       String,
+    pub id: String,
+    pub name: String,
     /// Estado según el daemon: "downloading" | "seeding"
-    pub state:      String,
+    pub state: String,
     pub downloaded: u64,
     pub total_size: u64,
-    pub peers:      usize,
+    pub peers: usize,
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -69,7 +69,9 @@ mod tests {
 
     #[test]
     fn request_roundtrip_flow_start() {
-        let req = IpcRequest::FlowStart { id: "abc123".into() };
+        let req = IpcRequest::FlowStart {
+            id: "abc123".into(),
+        };
         let json = serde_json::to_string(&req).unwrap();
         let back: IpcRequest = serde_json::from_str(&json).unwrap();
         assert!(matches!(back, IpcRequest::FlowStart { id } if id == "abc123"));
@@ -95,12 +97,12 @@ mod tests {
     fn response_roundtrip_status() {
         let resp = IpcResponse::Status {
             flows: vec![IpcFlowInfo {
-                id:         "deadbeef".into(),
-                name:       "test.bin".into(),
-                state:      "downloading".into(),
+                id: "deadbeef".into(),
+                name: "test.bin".into(),
+                state: "downloading".into(),
                 downloaded: 1024,
                 total_size: 4096,
-                peers:      2,
+                peers: 2,
             }],
         };
         let json = serde_json::to_string(&resp).unwrap();
@@ -116,7 +118,9 @@ mod tests {
 
     #[test]
     fn response_roundtrip_error() {
-        let resp = IpcResponse::Error { message: "flow not found".into() };
+        let resp = IpcResponse::Error {
+            message: "flow not found".into(),
+        };
         let json = serde_json::to_string(&resp).unwrap();
         let back: IpcResponse = serde_json::from_str(&json).unwrap();
         assert!(matches!(back, IpcResponse::Error { message } if message == "flow not found"));

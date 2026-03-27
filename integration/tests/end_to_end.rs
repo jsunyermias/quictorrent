@@ -1,12 +1,12 @@
-use std::net::SocketAddr;
 use bytes::Bytes;
+use std::net::SocketAddr;
 use tempfile::tempdir;
 
 use bitturbulence_pieces::{hash_piece, verify_piece, PieceStore};
 use bitturbulence_protocol::{AuthPayload, Message, MessageCodec, PROTOCOL_VERSION};
 use bitturbulence_transport::QuicEndpoint;
-use tokio_util::codec::{FramedRead, FramedWrite};
 use futures_util::{SinkExt, StreamExt};
+use tokio_util::codec::{FramedRead, FramedWrite};
 
 const PIECE_LEN: u64 = 256;
 const TOTAL_LEN: u64 = 256;
@@ -26,15 +26,15 @@ async fn full_download_one_piece() {
     let (piece_data, piece_hash) = make_piece();
 
     let server_dir = tempdir().unwrap();
-    let server_store = PieceStore::open(
-        server_dir.path().join("server.bin"), PIECE_LEN, TOTAL_LEN,
-    ).await.unwrap();
+    let server_store = PieceStore::open(server_dir.path().join("server.bin"), PIECE_LEN, TOTAL_LEN)
+        .await
+        .unwrap();
     server_store.write_block(0, 0, &piece_data).await.unwrap();
 
     let client_dir = tempdir().unwrap();
-    let client_store = PieceStore::open(
-        client_dir.path().join("client.bin"), PIECE_LEN, TOTAL_LEN,
-    ).await.unwrap();
+    let client_store = PieceStore::open(client_dir.path().join("client.bin"), PIECE_LEN, TOTAL_LEN)
+        .await
+        .unwrap();
 
     let server_ep = QuicEndpoint::bind("127.0.0.1:0".parse::<SocketAddr>().unwrap()).unwrap();
     let server_addr = server_ep.local_addr().unwrap();
@@ -59,22 +59,33 @@ async fn full_download_one_piece() {
                 }
                 m => panic!("expected Hello, got {:?}", m),
             }
-        };
+        }
 
-        writer.send(Message::HelloAck {
-            peer_id: PEER_ID_B,
-            accepted: true,
-            reason: None,
-        }).await.unwrap();
+        writer
+            .send(Message::HelloAck {
+                peer_id: PEER_ID_B,
+                accepted: true,
+                reason: None,
+            })
+            .await
+            .unwrap();
 
         // Anunciar que tenemos el archivo 0 completo
-        writer.send(Message::HaveAll { file_index: 0 }).await.unwrap();
+        writer
+            .send(Message::HaveAll { file_index: 0 })
+            .await
+            .unwrap();
 
         // Esperar Request
         let (fi, pi, begin, length) = loop {
             match reader.next().await.unwrap().unwrap() {
                 Message::KeepAlive => continue,
-                Message::Request { file_index, piece_index, begin, length } => {
+                Message::Request {
+                    file_index,
+                    piece_index,
+                    begin,
+                    length,
+                } => {
                     break (file_index, piece_index, begin, length);
                 }
                 m => panic!("expected Request, got {:?}", m),
@@ -82,10 +93,15 @@ async fn full_download_one_piece() {
         };
 
         let data = server_store.read_block(pi, begin, length).await.unwrap();
-        writer.send(Message::Piece {
-            file_index: fi, piece_index: pi, begin,
-            data: Bytes::from(data),
-        }).await.unwrap();
+        writer
+            .send(Message::Piece {
+                file_index: fi,
+                piece_index: pi,
+                begin,
+                data: Bytes::from(data),
+            })
+            .await
+            .unwrap();
 
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
     });
@@ -103,12 +119,15 @@ async fn full_download_one_piece() {
         writer.send(Message::KeepAlive).await.unwrap();
 
         // Enviar Hello
-        writer.send(Message::Hello {
-            version: PROTOCOL_VERSION,
-            peer_id: PEER_ID_A,
-            info_hash: INFO_HASH,
-            auth: AuthPayload::None,
-        }).await.unwrap();
+        writer
+            .send(Message::Hello {
+                version: PROTOCOL_VERSION,
+                peer_id: PEER_ID_A,
+                info_hash: INFO_HASH,
+                auth: AuthPayload::None,
+            })
+            .await
+            .unwrap();
 
         // Esperar HelloAck
         loop {
@@ -132,28 +151,42 @@ async fn full_download_one_piece() {
         }
 
         // Enviar Request
-        writer.send(Message::Request {
-            file_index: 0, piece_index: 0, begin: 0, length: BLOCK_LEN,
-        }).await.unwrap();
+        writer
+            .send(Message::Request {
+                file_index: 0,
+                piece_index: 0,
+                begin: 0,
+                length: BLOCK_LEN,
+            })
+            .await
+            .unwrap();
 
         // Esperar Piece
         let (piece_index, begin, data) = loop {
             match reader.next().await.unwrap().unwrap() {
                 Message::KeepAlive => continue,
-                Message::Piece { piece_index, begin, data, .. } => break (piece_index, begin, data),
+                Message::Piece {
+                    piece_index,
+                    begin,
+                    data,
+                    ..
+                } => break (piece_index, begin, data),
                 m => panic!("expected Piece, got {:?}", m),
             }
         };
 
-        client_store.write_block(piece_index, begin, &data).await.unwrap();
+        client_store
+            .write_block(piece_index, begin, &data)
+            .await
+            .unwrap();
         let stored = client_store.read_piece(piece_index).await.unwrap();
         result_tx.send(verify_piece(&stored, &piece_hash)).unwrap();
     });
 
-    let verified = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        result_rx,
-    ).await.expect("test timed out").unwrap();
+    let verified = tokio::time::timeout(std::time::Duration::from_secs(10), result_rx)
+        .await
+        .expect("test timed out")
+        .unwrap();
 
     assert!(verified, "piece SHA-256 verification failed");
 }

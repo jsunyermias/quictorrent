@@ -1,8 +1,8 @@
-use std::fmt;
-use rand::RngCore;
-use sha2::{Digest, Sha256};
-use serde::{Deserialize, Serialize};
 use crate::error::{DhtError, Result};
+use rand::RngCore;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::fmt;
 
 /// Identificador de nodo DHT: 256 bits (SHA-256).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -34,7 +34,9 @@ impl NodeId {
         Self(arr)
     }
 
-    pub fn as_bytes(&self) -> &[u8; 32] { &self.0 }
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
 
     /// Distancia XOR entre dos NodeIds.
     pub fn distance(&self, other: &NodeId) -> Distance {

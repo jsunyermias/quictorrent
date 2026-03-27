@@ -1,7 +1,7 @@
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
-use anyhow::Result;
 
 /// Estado de una descarga.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,11 +17,11 @@ pub enum DownloadState {
 impl std::fmt::Display for DownloadState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Queued      => write!(f, "queued"),
+            Self::Queued => write!(f, "queued"),
             Self::Downloading => write!(f, "downloading"),
-            Self::Paused      => write!(f, "paused"),
-            Self::Seeding     => write!(f, "seeding"),
-            Self::Error(e)    => write!(f, "error: {}", e),
+            Self::Paused => write!(f, "paused"),
+            Self::Seeding => write!(f, "seeding"),
+            Self::Error(e) => write!(f, "error: {}", e),
         }
     }
 }
@@ -30,29 +30,32 @@ impl std::fmt::Display for DownloadState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowEntry {
     /// ID corto (primeros 8 hex del info_hash).
-    pub id:          String,
+    pub id: String,
     /// Info hash completo (64 hex).
-    pub info_hash:   String,
+    pub info_hash: String,
     /// Nombre del BitFlow.
-    pub name:        String,
+    pub name: String,
     /// Directorio de descarga.
-    pub save_path:       PathBuf,
+    pub save_path: PathBuf,
     /// Ruta al .bitflow (BitFlow metainfo). Vacía si se añadió antes de esta versión.
     #[serde(default)]
-    pub metainfo_path:   PathBuf,
+    pub metainfo_path: PathBuf,
     /// Estado actual.
-    pub state:       DownloadState,
+    pub state: DownloadState,
     /// Bytes descargados.
-    pub downloaded:  u64,
+    pub downloaded: u64,
     /// Tamaño total.
-    pub total_size:  u64,
+    pub total_size: u64,
     /// Número de peers conectados.
-    pub peers:       usize,
+    pub peers: usize,
 }
 
 impl FlowEntry {
+    #[allow(dead_code)]
     pub fn progress(&self) -> f32 {
-        if self.total_size == 0 { return 0.0; }
+        if self.total_size == 0 {
+            return 0.0;
+        }
         self.downloaded as f32 / self.total_size as f32 * 100.0
     }
 }
@@ -86,7 +89,8 @@ impl ClientState {
     }
 
     pub fn get(&self, id: &str) -> Option<&FlowEntry> {
-        self.flows.get(id)
+        self.flows
+            .get(id)
             .or_else(|| self.flows.values().find(|e| e.info_hash.starts_with(id)))
     }
 
@@ -94,7 +98,9 @@ impl ClientState {
         if self.flows.contains_key(id) {
             return self.flows.get_mut(id);
         }
-        let key = self.flows.keys()
+        let key = self
+            .flows
+            .keys()
             .find(|k| self.flows[*k].info_hash.starts_with(id))
             .cloned();
         key.and_then(|k| self.flows.get_mut(&k))

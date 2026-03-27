@@ -2,19 +2,31 @@ use crate::error::{ProtocolError, Result};
 
 /// Prioridad de descarga de un archivo. 9 niveles.
 /// Se transmite como u8 en el protocolo wire.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[repr(u8)]
 pub enum Priority {
-    Minimum  = 0,
-    VeryLow  = 1,
-    Lower    = 2,
-    Low      = 3,
+    Minimum = 0,
+    VeryLow = 1,
+    Lower = 2,
+    Low = 3,
     #[default]
-    Normal   = 4,
-    High     = 5,
-    Higher   = 6,
+    Normal = 4,
+    High = 5,
+    Higher = 6,
     VeryHigh = 7,
-    Maximum  = 8,
+    Maximum = 8,
 }
 
 impl Priority {
@@ -33,9 +45,10 @@ impl Priority {
         }
     }
 
-    pub fn as_u8(self) -> u8 { self as u8 }
+    pub fn as_u8(self) -> u8 {
+        self as u8
+    }
 }
-
 
 #[cfg(test)]
 mod tests {

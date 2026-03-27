@@ -12,7 +12,7 @@ use crate::{
 
 /// Cliente QUIC para un tracker BitTurbulence.
 pub struct TrackerClient {
-    addr:       SocketAddr,
+    addr: SocketAddr,
     auth_token: Option<String>,
 }
 
@@ -41,7 +41,7 @@ impl TrackerClient {
     pub async fn scrape(&self, info_hash: &[u8; 32]) -> Result<ScrapeResponse> {
         let msg = TrackerMessage::Scrape {
             auth_token: self.auth_token.clone(),
-            info_hash:  hex::encode(info_hash),
+            info_hash: hex::encode(info_hash),
         };
         debug!("scrape a {}", self.addr);
         match self.send(msg).await? {

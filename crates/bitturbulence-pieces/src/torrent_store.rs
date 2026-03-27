@@ -1,5 +1,5 @@
-use std::path::Path;
 use bitturbulence_protocol::Metainfo;
+use std::path::Path;
 
 use crate::{error::Result, store::PieceStore};
 
@@ -51,7 +51,9 @@ impl TorrentStore {
         begin: u32,
         length: u32,
     ) -> Result<Vec<u8>> {
-        self.stores[file_index].read_block(piece, begin, length).await
+        self.stores[file_index]
+            .read_block(piece, begin, length)
+            .await
     }
 
     /// Escribe un bloque de datos en un archivo.
@@ -62,7 +64,9 @@ impl TorrentStore {
         begin: u32,
         data: &[u8],
     ) -> Result<()> {
-        self.stores[file_index].write_block(piece, begin, data).await
+        self.stores[file_index]
+            .write_block(piece, begin, data)
+            .await
     }
 
     /// Lee una pieza completa de un archivo y la devuelve para verificación.
@@ -81,9 +85,10 @@ mod tests {
         Metainfo {
             name: "test-torrent".into(),
             info_hash: [0u8; 32],
-            files: files.iter().map(|(name, size)| {
-                FileEntry::new(vec![name.to_string()], *size, Priority::Normal)
-            }).collect(),
+            files: files
+                .iter()
+                .map(|(name, size)| FileEntry::new(vec![name.to_string()], *size, Priority::Normal))
+                .collect(),
             trackers: vec![],
             comment: None,
         }

@@ -1,5 +1,5 @@
-use super::BlockScheduler;
 use super::types::BlockState;
+use super::BlockScheduler;
 
 impl BlockScheduler {
     /// Marca el bloque `(pi, bi)` como completado y almacena su hash SHA-256.
@@ -10,11 +10,17 @@ impl BlockScheduler {
     pub fn mark_block_done(&mut self, pi: u32, bi: u32, block_hash: [u8; 32]) -> bool {
         let pi = pi as usize;
         let bi = bi as usize;
-        if pi >= self.num_pieces { return false; }
-        if self.piece_done[pi] || self.piece_verifying[pi] { return false; }
-        if bi >= self.block_state[pi].len() { return false; }
+        if pi >= self.num_pieces {
+            return false;
+        }
+        if self.piece_done[pi] || self.piece_verifying[pi] {
+            return false;
+        }
+        if bi >= self.block_state[pi].len() {
+            return false;
+        }
 
-        self.block_state[pi][bi]  = BlockState::Done;
+        self.block_state[pi][bi] = BlockState::Done;
         self.block_hashes[pi][bi] = Some(block_hash);
 
         let all_done = self.block_state[pi].iter().all(|s| *s == BlockState::Done);
@@ -30,7 +36,9 @@ impl BlockScheduler {
     /// se calcula la raíz Merkle sin releer el disco.
     pub fn piece_block_hashes(&self, pi: u32) -> Option<Vec<[u8; 32]>> {
         let pi = pi as usize;
-        if pi >= self.num_pieces { return None; }
+        if pi >= self.num_pieces {
+            return None;
+        }
         self.block_hashes[pi].iter().copied().collect()
     }
 
@@ -40,7 +48,9 @@ impl BlockScheduler {
     pub fn mark_block_failed(&mut self, pi: u32, bi: u32) {
         let pi = pi as usize;
         let bi = bi as usize;
-        if pi >= self.num_pieces || bi >= self.block_state[pi].len() { return; }
+        if pi >= self.num_pieces || bi >= self.block_state[pi].len() {
+            return;
+        }
         if let BlockState::InFlight(n) = self.block_state[pi][bi] {
             self.block_state[pi][bi] = if n <= 1 {
                 BlockState::Pending
@@ -54,7 +64,7 @@ impl BlockScheduler {
     pub fn mark_piece_verified(&mut self, pi: u32) {
         let pi = pi as usize;
         if pi < self.num_pieces {
-            self.piece_done[pi]      = true;
+            self.piece_done[pi] = true;
             self.piece_verifying[pi] = false;
         }
     }
@@ -65,8 +75,12 @@ impl BlockScheduler {
         let pi = pi as usize;
         if pi < self.num_pieces {
             self.piece_verifying[pi] = false;
-            for b in &mut self.block_state[pi] { *b = BlockState::Pending; }
-            for h in &mut self.block_hashes[pi] { *h = None; }
+            for b in &mut self.block_state[pi] {
+                *b = BlockState::Pending;
+            }
+            for h in &mut self.block_hashes[pi] {
+                *h = None;
+            }
         }
     }
 
@@ -118,7 +132,9 @@ impl BlockScheduler {
 
     /// Fracción de piezas completadas (0.0–1.0).
     pub fn progress(&self) -> f32 {
-        if self.num_pieces == 0 { return 1.0; }
+        if self.num_pieces == 0 {
+            return 1.0;
+        }
         self.num_complete_pieces() as f32 / self.num_pieces as f32
     }
 }

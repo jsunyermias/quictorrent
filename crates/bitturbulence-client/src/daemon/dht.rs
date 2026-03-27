@@ -2,6 +2,8 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
+
+type KnownPeers = Arc<Mutex<HashSet<String>>>;
 use tokio::time::interval;
 use tracing::{info, warn};
 
@@ -14,14 +16,17 @@ use super::peer::run_peer;
 pub const DHT_ANNOUNCE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(300);
 
 pub async fn dht_loop(
-    handle:      DhtHandle,
-    flows:       Vec<(Arc<FlowCtx>, Arc<Mutex<HashSet<String>>>)>,
+    handle: DhtHandle,
+    flows: Vec<(Arc<FlowCtx>, KnownPeers)>,
     listen_port: u16,
-    endpoint:    Arc<QuicEndpoint>,
-    peer_id:     [u8; 32],
+    endpoint: Arc<QuicEndpoint>,
+    peer_id: [u8; 32],
 ) {
     handle.bootstrap().await;
-    info!("DHT bootstrap complete, routing table size: {}", handle.local_id().as_bytes().len());
+    info!(
+        "DHT bootstrap complete, routing table size: {}",
+        handle.local_id().as_bytes().len()
+    );
 
     let mut timer = interval(DHT_ANNOUNCE_INTERVAL);
     timer.tick().await;
@@ -41,14 +46,16 @@ pub async fn dht_loop(
             let peers = handle.get_peers(info_hash).await;
             for peer_addr in peers {
                 let is_new = known_peers.lock().await.insert(peer_addr.clone());
-                if !is_new { continue; }
-                let ep   = endpoint.clone();
+                if !is_new {
+                    continue;
+                }
+                let ep = endpoint.clone();
                 let ctx2 = ctx.clone();
                 tokio::spawn(async move {
                     match peer_addr.parse::<std::net::SocketAddr>() {
                         Ok(addr) => match ep.connect(addr).await {
                             Ok(conn) => run_peer(conn, ctx2, peer_id, true).await,
-                            Err(e)   => warn!("dht connect {addr}: {e}"),
+                            Err(e) => warn!("dht connect {addr}: {e}"),
                         },
                         Err(_) => warn!("dht invalid peer addr: {peer_addr}"),
                     }

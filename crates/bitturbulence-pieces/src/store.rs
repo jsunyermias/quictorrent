@@ -33,7 +33,12 @@ impl PieceStore {
 
         let num_pieces = total_length.div_ceil(piece_length) as u32;
 
-        Ok(Self { path, piece_length, total_length, num_pieces })
+        Ok(Self {
+            path,
+            piece_length,
+            total_length,
+            num_pieces,
+        })
     }
 
     /// Lee un bloque de datos del disco.
@@ -67,7 +72,10 @@ impl PieceStore {
     /// Lee la pieza completa del disco.
     pub async fn read_piece(&self, piece: u32) -> Result<Vec<u8>> {
         if piece >= self.num_pieces {
-            return Err(PiecesError::OutOfRange { index: piece, total: self.num_pieces });
+            return Err(PiecesError::OutOfRange {
+                index: piece,
+                total: self.num_pieces,
+            });
         }
         let piece_len = self.piece_len(piece);
         self.read_block(piece, 0, piece_len as u32).await
@@ -93,12 +101,18 @@ impl PieceStore {
 
     fn check_bounds(&self, piece: u32, begin: u32, length: u32) -> Result<()> {
         if piece >= self.num_pieces {
-            return Err(PiecesError::OutOfRange { index: piece, total: self.num_pieces });
+            return Err(PiecesError::OutOfRange {
+                index: piece,
+                total: self.num_pieces,
+            });
         }
         let piece_len = self.piece_len(piece);
         if begin as u64 + length as u64 > piece_len {
             return Err(PiecesError::BlockOutOfBounds {
-                piece, begin, length, piece_len,
+                piece,
+                begin,
+                length,
+                piece_len,
             });
         }
         Ok(())
@@ -126,10 +140,9 @@ mod tests {
 
     #[tokio::test]
     async fn last_piece_shorter() {
-        let store = PieceStore::open(
-            tempfile::tempdir().unwrap().path().join("t.dat"),
-            256, 300,
-        ).await.unwrap();
+        let store = PieceStore::open(tempfile::tempdir().unwrap().path().join("t.dat"), 256, 300)
+            .await
+            .unwrap();
         assert_eq!(store.num_pieces(), 2);
         assert_eq!(store.piece_len(0), 256);
         assert_eq!(store.piece_len(1), 44);
@@ -138,7 +151,9 @@ mod tests {
     #[tokio::test]
     async fn out_of_range_error() {
         let dir = tempdir().unwrap();
-        let store = PieceStore::open(dir.path().join("t.dat"), 256, 256).await.unwrap();
+        let store = PieceStore::open(dir.path().join("t.dat"), 256, 256)
+            .await
+            .unwrap();
         assert!(store.read_block(1, 0, 10).await.is_err());
     }
 }

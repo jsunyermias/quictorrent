@@ -14,14 +14,15 @@ use super::peer::run_peer;
 use super::HELLO_TIMEOUT;
 
 pub async fn handle_inbound(
-    conn:     PeerConnection,
+    conn: PeerConnection,
     torrents: Arc<HashMap<[u8; 32], Arc<FlowCtx>>>,
-    peer_id:  [u8; 32],
+    peer_id: [u8; 32],
 ) -> Result<()> {
     // Stream 1: Hello / HelloAck
     let (mut hello_w, mut hello_r) = conn.accept_bidi_stream().await?;
 
-    let msg = timeout(HELLO_TIMEOUT, hello_r.next()).await
+    let msg = timeout(HELLO_TIMEOUT, hello_r.next())
+        .await
         .map_err(|_| anyhow!("hello timeout"))?
         .ok_or_else(|| anyhow!("disconnected during hello"))??;
 
@@ -32,8 +33,13 @@ pub async fn handle_inbound(
 
     match torrents.get(&info_hash) {
         Some(ctx) => {
-            let ack = Message::HelloAck { peer_id, accepted: true, reason: None };
-            timeout(HELLO_TIMEOUT, hello_w.send(ack)).await
+            let ack = Message::HelloAck {
+                peer_id,
+                accepted: true,
+                reason: None,
+            };
+            timeout(HELLO_TIMEOUT, hello_w.send(ack))
+                .await
                 .map_err(|_| anyhow!("ack timeout"))??;
             drop(hello_w);
             drop(hello_r);
@@ -44,7 +50,7 @@ pub async fn handle_inbound(
             let ack = Message::HelloAck {
                 peer_id,
                 accepted: false,
-                reason:   Some("flow not found".into()),
+                reason: Some("flow not found".into()),
             };
             let _ = timeout(HELLO_TIMEOUT, hello_w.send(ack)).await;
             Ok(())
@@ -55,12 +61,17 @@ pub async fn handle_inbound(
 pub async fn accept_loop(
     endpoint: Arc<QuicEndpoint>,
     torrents: Arc<HashMap<[u8; 32], Arc<FlowCtx>>>,
-    peer_id:  [u8; 32],
+    peer_id: [u8; 32],
 ) {
     loop {
         match endpoint.accept().await {
-            None => { info!("QUIC endpoint closed"); break; }
-            Some(Err(e)) => { warn!("accept error: {e}"); }
+            None => {
+                info!("QUIC endpoint closed");
+                break;
+            }
+            Some(Err(e)) => {
+                warn!("accept error: {e}");
+            }
             Some(Ok(conn)) => {
                 let torrents = torrents.clone();
                 tokio::spawn(async move {

@@ -1,18 +1,20 @@
 //! Descargador mínimo: descarga un archivo de un filler.
 //! Uso: cargo run --bin download -- <ip:puerto> <info_hash_hex> <num_pieces> <piece_length> <output>
 
-use std::io::SeekFrom;
-use std::net::SocketAddr;
-use futures_util::{SinkExt, StreamExt};
-use bitturbulence_pieces::{hash_block, piece_root, file_root};
+use bitturbulence_pieces::{file_root, hash_block, piece_root};
 use bitturbulence_protocol::{AuthPayload, Message, MessageCodec, PROTOCOL_VERSION};
 use bitturbulence_transport::QuicEndpoint;
+use futures_util::{SinkExt, StreamExt};
+use std::io::SeekFrom;
+use std::net::SocketAddr;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).init();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 6 {
@@ -20,11 +22,11 @@ async fn main() -> anyhow::Result<()> {
         std::process::exit(1);
     }
 
-    let addr: SocketAddr    = args[1].parse()?;
-    let info_hash_hex       = &args[2];
-    let num_pieces: usize   = args[3].parse()?;
+    let addr: SocketAddr = args[1].parse()?;
+    let info_hash_hex = &args[2];
+    let num_pieces: usize = args[3].parse()?;
     let piece_length: usize = args[4].parse()?;
-    let output_path         = &args[5];
+    let output_path = &args[5];
 
     let info_hash_bytes = hex::decode(info_hash_hex)?;
     let mut info_hash = [0u8; 32];
@@ -43,18 +45,22 @@ async fn main() -> anyhow::Result<()> {
     writer.send(Message::KeepAlive).await?;
 
     // Hello
-    writer.send(Message::Hello {
-        version:   PROTOCOL_VERSION,
-        peer_id:   [0x44u8; 32], // 'D' de Downloader
-        info_hash,
-        auth:      AuthPayload::None,
-    }).await?;
+    writer
+        .send(Message::Hello {
+            version: PROTOCOL_VERSION,
+            peer_id: [0x44u8; 32], // 'D' de Downloader
+            info_hash,
+            auth: AuthPayload::None,
+        })
+        .await?;
 
     // Esperar HelloAck
     loop {
         match reader.next().await.unwrap()? {
             Message::KeepAlive => continue,
-            Message::HelloAck { accepted, reason, .. } => {
+            Message::HelloAck {
+                accepted, reason, ..
+            } => {
                 if !accepted {
                     anyhow::bail!("rechazado: {}", reason.unwrap_or_default());
                 }
@@ -69,32 +75,45 @@ async fn main() -> anyhow::Result<()> {
     loop {
         match reader.next().await.unwrap()? {
             Message::KeepAlive => continue,
-            Message::HaveAll { .. } => { println!("filler tiene todo"); break; }
+            Message::HaveAll { .. } => {
+                println!("filler tiene todo");
+                break;
+            }
             m => println!("ignorando: {:?}", m),
         }
     }
 
     // Abrir archivo de salida para escritura asíncrona pieza a pieza
     let mut file = tokio::fs::OpenOptions::new()
-        .write(true).create(true).truncate(true)
-        .open(output_path).await?;
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(output_path)
+        .await?;
 
     // Acumulamos las raíces Merkle de cada pieza (32 bytes × num_pieces)
     let mut piece_roots: Vec<[u8; 32]> = Vec::with_capacity(num_pieces);
     let mut total_bytes: u64 = 0;
 
     for pi in 0..num_pieces {
-        writer.send(Message::Request {
-            file_index:  0,
-            piece_index: pi as u32,
-            begin:       0,
-            length:      piece_length as u32,
-        }).await?;
+        writer
+            .send(Message::Request {
+                file_index: 0,
+                piece_index: pi as u32,
+                begin: 0,
+                length: piece_length as u32,
+            })
+            .await?;
 
         let data = loop {
             match reader.next().await.unwrap()? {
                 Message::KeepAlive => continue,
-                Message::Piece { piece_index, begin: 0, data, .. } if piece_index == pi as u32 => {
+                Message::Piece {
+                    piece_index,
+                    begin: 0,
+                    data,
+                    ..
+                } if piece_index == pi as u32 => {
                     break data;
                 }
                 Message::Reject { piece_index, .. } => {
@@ -105,7 +124,8 @@ async fn main() -> anyhow::Result<()> {
         };
 
         // Escribir al offset correcto y liberar los datos de inmediato
-        file.seek(SeekFrom::Start(pi as u64 * piece_length as u64)).await?;
+        file.seek(SeekFrom::Start(pi as u64 * piece_length as u64))
+            .await?;
         file.write_all(&data).await?;
         total_bytes = pi as u64 * piece_length as u64 + data.len() as u64;
 
@@ -130,6 +150,10 @@ async fn main() -> anyhow::Result<()> {
         println!("   calculado: {}", hex::encode(computed_hash));
     }
 
-    writer.send(Message::Bye { reason: "done".into() }).await?;
+    writer
+        .send(Message::Bye {
+            reason: "done".into(),
+        })
+        .await?;
     Ok(())
 }

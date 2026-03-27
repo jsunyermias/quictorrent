@@ -1,51 +1,78 @@
-use bytes::{Buf, BufMut, Bytes, BytesMut};
 use crate::bucket::NodeInfo;
-use crate::node_id::NodeId;
 use crate::error::{DhtError, Result};
+use crate::node_id::NodeId;
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-const MSG_PING:          u8 = 0;
-const MSG_PONG:          u8 = 1;
-const MSG_FIND_NODE:     u8 = 2;
-const MSG_NODES:         u8 = 3;
-const MSG_GET_PEERS:     u8 = 4;
-const MSG_GOT_PEERS:     u8 = 5;
+const MSG_PING: u8 = 0;
+const MSG_PONG: u8 = 1;
+const MSG_FIND_NODE: u8 = 2;
+const MSG_NODES: u8 = 3;
+const MSG_GET_PEERS: u8 = 4;
+const MSG_GOT_PEERS: u8 = 5;
 const MSG_ANNOUNCE_PEER: u8 = 6;
-const MSG_ANNOUNCE_ACK:  u8 = 7;
-const MSG_STORE:         u8 = 8;
-const MSG_STORE_ACK:     u8 = 9;
+const MSG_ANNOUNCE_ACK: u8 = 7;
+const MSG_STORE: u8 = 8;
+const MSG_STORE_ACK: u8 = 9;
 
 #[derive(Debug, Clone)]
 pub enum DhtMessage {
-    Ping          { sender: NodeId },
-    Pong          { sender: NodeId },
-    FindNode      { sender: NodeId, target: NodeId },
-    Nodes         { sender: NodeId, nodes: Vec<NodeInfo> },
-    GetPeers      { sender: NodeId, info_hash: [u8; 32] },
-    GotPeers      {
-        sender:    NodeId,
-        token:     [u8; 8],
-        peers:     Vec<String>,   // "ip:port"
-        nodes:     Vec<NodeInfo>, // más cercanos si no hay peers
+    Ping {
+        sender: NodeId,
     },
-    AnnouncePeer  { sender: NodeId, info_hash: [u8; 32], token: [u8; 8], addr: String },
-    AnnounceAck   { sender: NodeId },
-    Store         { sender: NodeId, key: [u8; 32], value: Bytes, token: [u8; 8] },
-    StoreAck      { sender: NodeId },
+    Pong {
+        sender: NodeId,
+    },
+    FindNode {
+        sender: NodeId,
+        target: NodeId,
+    },
+    Nodes {
+        sender: NodeId,
+        nodes: Vec<NodeInfo>,
+    },
+    GetPeers {
+        sender: NodeId,
+        info_hash: [u8; 32],
+    },
+    GotPeers {
+        sender: NodeId,
+        token: [u8; 8],
+        peers: Vec<String>,   // "ip:port"
+        nodes: Vec<NodeInfo>, // más cercanos si no hay peers
+    },
+    AnnouncePeer {
+        sender: NodeId,
+        info_hash: [u8; 32],
+        token: [u8; 8],
+        addr: String,
+    },
+    AnnounceAck {
+        sender: NodeId,
+    },
+    Store {
+        sender: NodeId,
+        key: [u8; 32],
+        value: Bytes,
+        token: [u8; 8],
+    },
+    StoreAck {
+        sender: NodeId,
+    },
 }
 
 impl DhtMessage {
     pub fn sender(&self) -> &NodeId {
         match self {
-            Self::Ping          { sender, .. } => sender,
-            Self::Pong          { sender, .. } => sender,
-            Self::FindNode      { sender, .. } => sender,
-            Self::Nodes         { sender, .. } => sender,
-            Self::GetPeers      { sender, .. } => sender,
-            Self::GotPeers      { sender, .. } => sender,
-            Self::AnnouncePeer  { sender, .. } => sender,
-            Self::AnnounceAck   { sender, .. } => sender,
-            Self::Store         { sender, .. } => sender,
-            Self::StoreAck      { sender, .. } => sender,
+            Self::Ping { sender, .. } => sender,
+            Self::Pong { sender, .. } => sender,
+            Self::FindNode { sender, .. } => sender,
+            Self::Nodes { sender, .. } => sender,
+            Self::GetPeers { sender, .. } => sender,
+            Self::GotPeers { sender, .. } => sender,
+            Self::AnnouncePeer { sender, .. } => sender,
+            Self::AnnounceAck { sender, .. } => sender,
+            Self::Store { sender, .. } => sender,
+            Self::StoreAck { sender, .. } => sender,
         }
     }
 
@@ -75,7 +102,12 @@ impl DhtMessage {
                 buf.put_slice(sender.as_bytes());
                 buf.put_slice(info_hash);
             }
-            Self::GotPeers { sender, token, peers, nodes } => {
+            Self::GotPeers {
+                sender,
+                token,
+                peers,
+                nodes,
+            } => {
                 buf.put_u8(MSG_GOT_PEERS);
                 buf.put_slice(sender.as_bytes());
                 buf.put_slice(token);
@@ -88,7 +120,12 @@ impl DhtMessage {
                 }
                 encode_nodes(&mut buf, nodes);
             }
-            Self::AnnouncePeer { sender, info_hash, token, addr } => {
+            Self::AnnouncePeer {
+                sender,
+                info_hash,
+                token,
+                addr,
+            } => {
                 buf.put_u8(MSG_ANNOUNCE_PEER);
                 buf.put_slice(sender.as_bytes());
                 buf.put_slice(info_hash);
@@ -101,7 +138,12 @@ impl DhtMessage {
                 buf.put_u8(MSG_ANNOUNCE_ACK);
                 buf.put_slice(sender.as_bytes());
             }
-            Self::Store { sender, key, value, token } => {
+            Self::Store {
+                sender,
+                key,
+                value,
+                token,
+            } => {
                 buf.put_u8(MSG_STORE);
                 buf.put_slice(sender.as_bytes());
                 buf.put_slice(key);
@@ -123,8 +165,12 @@ impl DhtMessage {
         }
         let id = buf.get_u8();
         match id {
-            MSG_PING => Ok(Self::Ping { sender: get_node_id(&mut buf)? }),
-            MSG_PONG => Ok(Self::Pong { sender: get_node_id(&mut buf)? }),
+            MSG_PING => Ok(Self::Ping {
+                sender: get_node_id(&mut buf)?,
+            }),
+            MSG_PONG => Ok(Self::Pong {
+                sender: get_node_id(&mut buf)?,
+            }),
 
             MSG_FIND_NODE => {
                 let sender = get_node_id(&mut buf)?;
@@ -134,7 +180,7 @@ impl DhtMessage {
 
             MSG_NODES => {
                 let sender = get_node_id(&mut buf)?;
-                let nodes  = decode_nodes(&mut buf)?;
+                let nodes = decode_nodes(&mut buf)?;
                 Ok(Self::Nodes { sender, nodes })
             }
 
@@ -146,7 +192,7 @@ impl DhtMessage {
 
             MSG_GOT_PEERS => {
                 let sender = get_node_id(&mut buf)?;
-                let token  = get_arr8(&mut buf)?;
+                let token = get_arr8(&mut buf)?;
                 let peer_count = buf.get_u16() as usize;
                 let mut peers = Vec::with_capacity(peer_count);
                 for _ in 0..peer_count {
@@ -156,31 +202,50 @@ impl DhtMessage {
                     peers.push(s);
                 }
                 let nodes = decode_nodes(&mut buf)?;
-                Ok(Self::GotPeers { sender, token, peers, nodes })
+                Ok(Self::GotPeers {
+                    sender,
+                    token,
+                    peers,
+                    nodes,
+                })
             }
 
             MSG_ANNOUNCE_PEER => {
-                let sender    = get_node_id(&mut buf)?;
+                let sender = get_node_id(&mut buf)?;
                 let info_hash = get_arr32(&mut buf)?;
-                let token     = get_arr8(&mut buf)?;
-                let len       = buf.get_u16() as usize;
+                let token = get_arr8(&mut buf)?;
+                let len = buf.get_u16() as usize;
                 let addr = String::from_utf8(buf.copy_to_bytes(len).to_vec())
                     .map_err(|_| DhtError::InvalidNodeId(0))?;
-                Ok(Self::AnnouncePeer { sender, info_hash, token, addr })
+                Ok(Self::AnnouncePeer {
+                    sender,
+                    info_hash,
+                    token,
+                    addr,
+                })
             }
 
-            MSG_ANNOUNCE_ACK => Ok(Self::AnnounceAck { sender: get_node_id(&mut buf)? }),
+            MSG_ANNOUNCE_ACK => Ok(Self::AnnounceAck {
+                sender: get_node_id(&mut buf)?,
+            }),
 
             MSG_STORE => {
                 let sender = get_node_id(&mut buf)?;
-                let key    = get_arr32(&mut buf)?;
-                let token  = get_arr8(&mut buf)?;
-                let len    = buf.get_u32() as usize;
-                let value  = buf.copy_to_bytes(len);
-                Ok(Self::Store { sender, key, value, token })
+                let key = get_arr32(&mut buf)?;
+                let token = get_arr8(&mut buf)?;
+                let len = buf.get_u32() as usize;
+                let value = buf.copy_to_bytes(len);
+                Ok(Self::Store {
+                    sender,
+                    key,
+                    value,
+                    token,
+                })
             }
 
-            MSG_STORE_ACK => Ok(Self::StoreAck { sender: get_node_id(&mut buf)? }),
+            MSG_STORE_ACK => Ok(Self::StoreAck {
+                sender: get_node_id(&mut buf)?,
+            }),
 
             other => Err(DhtError::InvalidNodeId(other as usize)),
         }
@@ -201,8 +266,8 @@ fn decode_nodes(buf: &mut Bytes) -> Result<Vec<NodeInfo>> {
     let count = buf.get_u16() as usize;
     let mut nodes = Vec::with_capacity(count);
     for _ in 0..count {
-        let id   = get_node_id(buf)?;
-        let len  = buf.get_u16() as usize;
+        let id = get_node_id(buf)?;
+        let len = buf.get_u16() as usize;
         let addr = String::from_utf8(buf.copy_to_bytes(len).to_vec())
             .map_err(|_| DhtError::InvalidNodeId(0))?;
         nodes.push(NodeInfo::new(id, addr));
@@ -245,27 +310,72 @@ mod tests {
     }
 
     #[test]
-    fn ping_pong()       { rt(DhtMessage::Ping { sender: NodeId::random() }); rt(DhtMessage::Pong { sender: NodeId::random() }); }
+    fn ping_pong() {
+        rt(DhtMessage::Ping {
+            sender: NodeId::random(),
+        });
+        rt(DhtMessage::Pong {
+            sender: NodeId::random(),
+        });
+    }
     #[test]
-    fn find_node()       { rt(DhtMessage::FindNode { sender: NodeId::random(), target: NodeId::random() }); }
+    fn find_node() {
+        rt(DhtMessage::FindNode {
+            sender: NodeId::random(),
+            target: NodeId::random(),
+        });
+    }
     #[test]
-    fn nodes()           { rt(DhtMessage::Nodes { sender: NodeId::random(), nodes: vec![NodeInfo::new(NodeId::random(), "1.2.3.4:6881".into())] }); }
+    fn nodes() {
+        rt(DhtMessage::Nodes {
+            sender: NodeId::random(),
+            nodes: vec![NodeInfo::new(NodeId::random(), "1.2.3.4:6881".into())],
+        });
+    }
     #[test]
-    fn get_peers()       { rt(DhtMessage::GetPeers { sender: NodeId::random(), info_hash: [0xAB; 32] }); }
+    fn get_peers() {
+        rt(DhtMessage::GetPeers {
+            sender: NodeId::random(),
+            info_hash: [0xAB; 32],
+        });
+    }
     #[test]
-    fn got_peers()       {
+    fn got_peers() {
         rt(DhtMessage::GotPeers {
-            sender: NodeId::random(), token: [1u8; 8],
+            sender: NodeId::random(),
+            token: [1u8; 8],
             peers: vec!["1.2.3.4:6881".into()],
             nodes: vec![],
         });
     }
     #[test]
-    fn announce_peer()   { rt(DhtMessage::AnnouncePeer { sender: NodeId::random(), info_hash: [0u8; 32], token: [2u8; 8], addr: "1.2.3.4:6881".into() }); }
+    fn announce_peer() {
+        rt(DhtMessage::AnnouncePeer {
+            sender: NodeId::random(),
+            info_hash: [0u8; 32],
+            token: [2u8; 8],
+            addr: "1.2.3.4:6881".into(),
+        });
+    }
     #[test]
-    fn announce_ack()    { rt(DhtMessage::AnnounceAck { sender: NodeId::random() }); }
+    fn announce_ack() {
+        rt(DhtMessage::AnnounceAck {
+            sender: NodeId::random(),
+        });
+    }
     #[test]
-    fn store()           { rt(DhtMessage::Store { sender: NodeId::random(), key: [0u8; 32], value: Bytes::from_static(b"hello"), token: [3u8; 8] }); }
+    fn store() {
+        rt(DhtMessage::Store {
+            sender: NodeId::random(),
+            key: [0u8; 32],
+            value: Bytes::from_static(b"hello"),
+            token: [3u8; 8],
+        });
+    }
     #[test]
-    fn store_ack()       { rt(DhtMessage::StoreAck { sender: NodeId::random() }); }
+    fn store_ack() {
+        rt(DhtMessage::StoreAck {
+            sender: NodeId::random(),
+        });
+    }
 }

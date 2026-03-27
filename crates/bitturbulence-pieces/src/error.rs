@@ -12,7 +12,12 @@ pub enum PiecesError {
     OutOfRange { index: u32, total: u32 },
 
     #[error("block out of bounds: piece {piece} offset {begin}+{length} > {piece_len}")]
-    BlockOutOfBounds { piece: u32, begin: u32, length: u32, piece_len: u64 },
+    BlockOutOfBounds {
+        piece: u32,
+        begin: u32,
+        length: u32,
+        piece_len: u64,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, PiecesError>;

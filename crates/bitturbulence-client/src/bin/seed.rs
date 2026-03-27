@@ -1,17 +1,19 @@
 //! Seeder mínimo: sirve un archivo a quien conecte.
 //! Uso: cargo run --bin seed -- <archivo> <puerto>
 
-use std::net::SocketAddr;
-use bytes::Bytes;
-use futures_util::{SinkExt, StreamExt};
-use bitturbulence_pieces::{hash_block, piece_root, file_root};
+use bitturbulence_pieces::{file_root, hash_block, piece_root};
 use bitturbulence_protocol::{Message, MessageCodec};
 use bitturbulence_transport::QuicEndpoint;
+use bytes::Bytes;
+use futures_util::{SinkExt, StreamExt};
+use std::net::SocketAddr;
 use tokio_util::codec::{FramedRead, FramedWrite};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).init();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
@@ -20,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let file_path = &args[1];
-    let port: u16  = args[2].parse()?;
+    let port: u16 = args[2].parse()?;
 
     // Leer el archivo completo
     let data = std::fs::read(file_path)?;
@@ -46,10 +48,12 @@ async fn main() -> anyhow::Result<()> {
     println!("---");
 
     let bind_addr: SocketAddr = format!("0.0.0.0:{}", port).parse()?;
-    let endpoint  = QuicEndpoint::bind(bind_addr)?;
+    let endpoint = QuicEndpoint::bind(bind_addr)?;
 
     loop {
-        let Some(Ok(conn)) = endpoint.accept().await else { continue };
+        let Some(Ok(conn)) = endpoint.accept().await else {
+            continue;
+        };
         let peer_addr = conn.remote_addr();
         println!("[{}] conexión entrante", peer_addr);
 
@@ -65,51 +69,94 @@ async fn main() -> anyhow::Result<()> {
             loop {
                 match reader.next().await.unwrap().unwrap() {
                     Message::KeepAlive => continue,
-                    Message::Hello { peer_id, info_hash, .. } => {
+                    Message::Hello {
+                        peer_id, info_hash, ..
+                    } => {
                         if info_hash != info_hash_clone {
                             println!("[{}] info_hash incorrecto", peer_addr);
-                            writer.send(Message::HelloAck {
-                                peer_id: [0u8; 32],
-                                accepted: false,
-                                reason: Some("info_hash mismatch".into()),
-                            }).await.unwrap();
+                            writer
+                                .send(Message::HelloAck {
+                                    peer_id: [0u8; 32],
+                                    accepted: false,
+                                    reason: Some("info_hash mismatch".into()),
+                                })
+                                .await
+                                .unwrap();
                             return;
                         }
-                        println!("[{}] hello ok, peer_id={}", peer_addr, hex::encode(&peer_id[..4]));
-                        writer.send(Message::HelloAck {
-                            peer_id: [0x53u8; 32], // 'S' de Seeder
-                            accepted: true,
-                            reason: None,
-                        }).await.unwrap();
+                        println!(
+                            "[{}] hello ok, peer_id={}",
+                            peer_addr,
+                            hex::encode(&peer_id[..4])
+                        );
+                        writer
+                            .send(Message::HelloAck {
+                                peer_id: [0x53u8; 32], // 'S' de Seeder
+                                accepted: true,
+                                reason: None,
+                            })
+                            .await
+                            .unwrap();
                         break;
                     }
-                    m => { println!("[{}] mensaje inesperado: {:?}", peer_addr, m); return; }
+                    m => {
+                        println!("[{}] mensaje inesperado: {:?}", peer_addr, m);
+                        return;
+                    }
                 }
             }
 
             // Anunciar que tenemos todo
-            writer.send(Message::HaveAll { file_index: 0 }).await.unwrap();
+            writer
+                .send(Message::HaveAll { file_index: 0 })
+                .await
+                .unwrap();
 
             // Servir requests
             loop {
                 match reader.next().await {
-                    None | Some(Err(_)) => { println!("[{}] desconectado", peer_addr); break; }
-                    Some(Ok(Message::Request { file_index: 0, piece_index, begin, length })) => {
+                    None | Some(Err(_)) => {
+                        println!("[{}] desconectado", peer_addr);
+                        break;
+                    }
+                    Some(Ok(Message::Request {
+                        file_index: 0,
+                        piece_index,
+                        begin,
+                        length,
+                    })) => {
                         let pi = piece_index as usize;
                         if pi >= pieces_clone.len() {
-                            writer.send(Message::Reject {
-                                file_index: 0, piece_index, begin, length,
-                            }).await.unwrap();
+                            writer
+                                .send(Message::Reject {
+                                    file_index: 0,
+                                    piece_index,
+                                    begin,
+                                    length,
+                                })
+                                .await
+                                .unwrap();
                             continue;
                         }
                         let piece = &pieces_clone[pi];
                         let begin_u = begin as usize;
                         let end_u = (begin + length) as usize;
                         let data = Bytes::copy_from_slice(&piece[begin_u..end_u.min(piece.len())]);
-                        writer.send(Message::Piece {
-                            file_index: 0, piece_index, begin, data,
-                        }).await.unwrap();
-                        println!("[{}] pieza {}/{} enviada", peer_addr, piece_index + 1, pieces_clone.len());
+                        writer
+                            .send(Message::Piece {
+                                file_index: 0,
+                                piece_index,
+                                begin,
+                                data,
+                            })
+                            .await
+                            .unwrap();
+                        println!(
+                            "[{}] pieza {}/{} enviada",
+                            peer_addr,
+                            piece_index + 1,
+                            pieces_clone.len()
+                        );
                     }
                     Some(Ok(Message::Bye { reason })) => {
                         println!("[{}] bye: {}", peer_addr, reason);

@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use crate::bucket::{KBucket, NodeInfo};
 use crate::node_id::NodeId;
+use serde::{Deserialize, Serialize};
 
 /// Tabla de routing Kademlia con 256 k-buckets (uno por bit de distancia).
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,7 +19,9 @@ impl RoutingTable {
 
     /// Añade o actualiza un nodo en la tabla.
     pub fn upsert(&mut self, node: NodeInfo) -> bool {
-        if node.id == self.local_id { return false; }
+        if node.id == self.local_id {
+            return false;
+        }
         let idx = self.local_id.bucket_index(&node.id).min(255);
         self.buckets[idx].upsert(node)
     }
@@ -32,7 +34,9 @@ impl RoutingTable {
 
     /// Devuelve los K nodos más cercanos al target.
     pub fn closest(&self, target: &NodeId, count: usize) -> Vec<NodeInfo> {
-        let mut all: Vec<NodeInfo> = self.buckets.iter()
+        let mut all: Vec<NodeInfo> = self
+            .buckets
+            .iter()
             .flat_map(|b| b.nodes().iter().cloned())
             .collect();
 
@@ -46,11 +50,14 @@ impl RoutingTable {
         self.buckets.iter().map(|b| b.len()).sum()
     }
 
-    pub fn is_empty(&self) -> bool { self.len() == 0 }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     /// Todos los nodos de la tabla (para persistencia).
     pub fn all_nodes(&self) -> Vec<NodeInfo> {
-        self.buckets.iter()
+        self.buckets
+            .iter()
             .flat_map(|b| b.nodes().iter().cloned())
             .collect()
     }

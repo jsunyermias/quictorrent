@@ -1,5 +1,5 @@
-use std::net::SocketAddr;
 use quinn::Endpoint;
+use std::net::SocketAddr;
 use tracing::{info, warn};
 
 use crate::{
@@ -35,9 +35,7 @@ impl QuicEndpoint {
     }
 
     pub async fn connect(&self, addr: SocketAddr) -> Result<PeerConnection> {
-        let conn = self.endpoint
-            .connect(addr, "bitturbulence")?
-            .await?;
+        let conn = self.endpoint.connect(addr, "bitturbulence")?.await?;
 
         info!("Connected to peer {}", addr);
         Ok(PeerConnection::new(conn))

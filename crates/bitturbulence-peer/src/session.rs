@@ -1,5 +1,5 @@
-use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
+use std::time::Duration;
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
@@ -12,7 +12,7 @@ use crate::{
 };
 
 const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
-const MSG_TIMEOUT:   Duration = Duration::from_secs(120);
+const MSG_TIMEOUT: Duration = Duration::from_secs(120);
 
 pub trait SessionHandler: Send + 'static {
     fn on_piece(&mut self, file_index: u16, piece_index: u32, begin: u32, data: bytes::Bytes);
@@ -21,7 +21,13 @@ pub trait SessionHandler: Send + 'static {
     fn on_have_none(&mut self, file_index: u16);
     fn on_have_bitmap(&mut self, file_index: u16, bitmap: bytes::Bytes);
     fn on_priority_hint(&mut self, file_index: u16, priority: Priority);
-    fn on_request(&mut self, file_index: u16, piece_index: u32, begin: u32, length: u32) -> Option<bytes::Bytes>;
+    fn on_request(
+        &mut self,
+        file_index: u16,
+        piece_index: u32,
+        begin: u32,
+        length: u32,
+    ) -> Option<bytes::Bytes>;
 }
 
 pub struct PeerSession {
@@ -54,21 +60,27 @@ impl PeerSession {
         let (mut writer, mut reader) = self.conn.open_bidi_stream().await?;
 
         let hello = Message::Hello {
-            version:   PROTOCOL_VERSION,
-            peer_id:   self.our_peer_id,
+            version: PROTOCOL_VERSION,
+            peer_id: self.our_peer_id,
             info_hash: self.our_info_hash,
-            auth:      self.our_auth.clone(),
+            auth: self.our_auth.clone(),
         };
 
         timeout(HELLO_TIMEOUT, writer.send(hello))
-            .await.map_err(|_| PeerError::Timeout)??;
+            .await
+            .map_err(|_| PeerError::Timeout)??;
 
         let ack = timeout(HELLO_TIMEOUT, reader.next())
-            .await.map_err(|_| PeerError::Timeout)?
+            .await
+            .map_err(|_| PeerError::Timeout)?
             .ok_or(PeerError::Disconnected)??;
 
         match ack {
-            Message::HelloAck { peer_id, accepted, reason } => {
+            Message::HelloAck {
+                peer_id,
+                accepted,
+                reason,
+            } => {
                 if !accepted {
                     return Err(PeerError::HelloRejected(
                         reason.unwrap_or_else(|| "no reason".into()),
@@ -86,28 +98,35 @@ impl PeerSession {
         let (mut writer, mut reader) = self.conn.accept_bidi_stream().await?;
 
         let msg = timeout(HELLO_TIMEOUT, reader.next())
-            .await.map_err(|_| PeerError::Timeout)?
+            .await
+            .map_err(|_| PeerError::Timeout)?
             .ok_or(PeerError::Disconnected)??;
 
         match msg {
-            Message::Hello { version: _, peer_id, info_hash, auth: _ } => {
+            Message::Hello {
+                version: _,
+                peer_id,
+                info_hash,
+                auth: _,
+            } => {
                 if info_hash != self.our_info_hash {
                     let ack = Message::HelloAck {
-                        peer_id:  self.our_peer_id,
+                        peer_id: self.our_peer_id,
                         accepted: false,
-                        reason:   Some("info hash mismatch".into()),
+                        reason: Some("info hash mismatch".into()),
                     };
                     let _ = writer.send(ack).await;
                     return Err(PeerError::InfoHashMismatch);
                 }
 
                 let ack = Message::HelloAck {
-                    peer_id:  self.our_peer_id,
+                    peer_id: self.our_peer_id,
                     accepted: true,
-                    reason:   None,
+                    reason: None,
                 };
                 timeout(HELLO_TIMEOUT, writer.send(ack))
-                    .await.map_err(|_| PeerError::Timeout)??;
+                    .await
+                    .map_err(|_| PeerError::Timeout)??;
 
                 info!(peer = %self.conn.remote_addr(), "hello accepted");
                 Ok(peer_id)
@@ -122,10 +141,10 @@ impl PeerSession {
 
         loop {
             let msg = match timeout(MSG_TIMEOUT, reader.next()).await {
-                Err(_)           => return Err(PeerError::Timeout),
-                Ok(None)         => return Err(PeerError::Disconnected),
+                Err(_) => return Err(PeerError::Timeout),
+                Ok(None) => return Err(PeerError::Disconnected),
                 Ok(Some(Err(e))) => return Err(PeerError::Protocol(e)),
-                Ok(Some(Ok(m)))  => m,
+                Ok(Some(Ok(m))) => m,
             };
 
             debug!(peer = %self.conn.remote_addr(), ?msg, "received");
@@ -143,7 +162,10 @@ impl PeerSession {
                     handler.on_have_none(file_index);
                 }
 
-                Message::HavePiece { file_index, piece_index } => {
+                Message::HavePiece {
+                    file_index,
+                    piece_index,
+                } => {
                     self.state.apply_have_piece(file_index, piece_index);
                     handler.on_have_piece(file_index, piece_index);
                 }
@@ -153,24 +175,56 @@ impl PeerSession {
                     handler.on_have_bitmap(file_index, bitmap);
                 }
 
-                Message::Request { file_index, piece_index, begin, length } => {
+                Message::Request {
+                    file_index,
+                    piece_index,
+                    begin,
+                    length,
+                } => {
                     if let Some(data) = handler.on_request(file_index, piece_index, begin, length) {
-                        writer.send(Message::Piece { file_index, piece_index, begin, data }).await?;
+                        writer
+                            .send(Message::Piece {
+                                file_index,
+                                piece_index,
+                                begin,
+                                data,
+                            })
+                            .await?;
                     } else {
-                        writer.send(Message::Reject { file_index, piece_index, begin, length }).await?;
+                        writer
+                            .send(Message::Reject {
+                                file_index,
+                                piece_index,
+                                begin,
+                                length,
+                            })
+                            .await?;
                     }
                 }
 
-                Message::Piece { file_index, piece_index, begin, data } => {
+                Message::Piece {
+                    file_index,
+                    piece_index,
+                    begin,
+                    data,
+                } => {
                     self.state.remove_pending(file_index, piece_index, begin);
                     handler.on_piece(file_index, piece_index, begin, data);
                 }
 
-                Message::Cancel { file_index, piece_index, begin, .. } => {
+                Message::Cancel {
+                    file_index,
+                    piece_index,
+                    begin,
+                    ..
+                } => {
                     self.state.remove_pending(file_index, piece_index, begin);
                 }
 
-                Message::PriorityHint { file_index, priority } => {
+                Message::PriorityHint {
+                    file_index,
+                    priority,
+                } => {
                     handler.on_priority_hint(file_index, priority);
                 }
 
@@ -201,13 +255,29 @@ impl PeerSession {
         begin: u32,
         length: u32,
     ) -> Result<()> {
-        self.state.add_pending(PendingRequest { file_index, piece_index, begin, length });
-        self.conn.send_message(Message::Request { file_index, piece_index, begin, length }).await?;
+        self.state.add_pending(PendingRequest {
+            file_index,
+            piece_index,
+            begin,
+            length,
+        });
+        self.conn
+            .send_message(Message::Request {
+                file_index,
+                piece_index,
+                begin,
+                length,
+            })
+            .await?;
         Ok(())
     }
 
     pub async fn send_bye(&self, reason: &str) -> Result<()> {
-        self.conn.send_message(Message::Bye { reason: reason.into() }).await?;
+        self.conn
+            .send_message(Message::Bye {
+                reason: reason.into(),
+            })
+            .await?;
         Ok(())
     }
 }

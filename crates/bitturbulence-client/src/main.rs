@@ -5,21 +5,20 @@ mod daemon;
 mod ipc_proto;
 mod state;
 
-use std::path::PathBuf;
 use anyhow::Result;
 use clap::Parser;
+use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
+use bitturbulence_protocol::Priority;
 use cli::{Cli, Commands, FlowAction};
 use config::Config;
-use bitturbulence_protocol::Priority;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("warn"))
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
         )
         .init();
 
@@ -32,9 +31,9 @@ async fn main() -> Result<()> {
             .join("config.json")
     });
 
-    let config     = Config::load(&config_path)?;
+    let config = Config::load(&config_path)?;
     let state_path = config.state_file.clone();
-    let sock_path  = config.socket_path.clone();
+    let sock_path = config.socket_path.clone();
 
     match cli.command {
         Commands::Status => {
@@ -52,7 +51,11 @@ async fn main() -> Result<()> {
         }
 
         Commands::Flow { action } => match action {
-            FlowAction::Add { path, save, priority } => {
+            FlowAction::Add {
+                path,
+                save,
+                priority,
+            } => {
                 let prio = Priority::from_u8(priority).unwrap_or(Priority::Normal);
                 commands::cmd_add(&path, save, prio, &state_path, &config).await?;
             }
@@ -68,7 +71,14 @@ async fn main() -> Result<()> {
             FlowAction::Peers { id } => {
                 commands::cmd_peers(&id, &state_path, &sock_path).await?;
             }
-            FlowAction::Create { path, name, trackers, comment, priority, output } => {
+            FlowAction::Create {
+                path,
+                name,
+                trackers,
+                comment,
+                priority,
+                output,
+            } => {
                 let prio = Priority::from_u8(priority).unwrap_or(Priority::Normal);
                 commands::cmd_create(&path, name, trackers, comment, prio, output)?;
             }

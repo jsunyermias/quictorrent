@@ -1,6 +1,6 @@
+use crate::error::{ProtocolError, Result};
 use sha2::{Digest, Sha256};
 use std::fmt;
-use crate::error::{ProtocolError, Result};
 
 /// Info hash SHA-256 de 32 bytes. Identifica unívocamente un torrent.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -37,18 +37,24 @@ impl fmt::Debug for InfoHash {
 
 impl fmt::Display for InfoHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for b in &self.0 { write!(f, "{:02x}", b)?; }
+        for b in &self.0 {
+            write!(f, "{:02x}", b)?;
+        }
         Ok(())
     }
 }
 
 impl TryFrom<&[u8]> for InfoHash {
     type Error = ProtocolError;
-    fn try_from(bytes: &[u8]) -> Result<Self> { Self::from_bytes(bytes) }
+    fn try_from(bytes: &[u8]) -> Result<Self> {
+        Self::from_bytes(bytes)
+    }
 }
 
 impl From<[u8; 32]> for InfoHash {
-    fn from(arr: [u8; 32]) -> Self { Self(arr) }
+    fn from(arr: [u8; 32]) -> Self {
+        Self(arr)
+    }
 }
 
 #[cfg(test)]

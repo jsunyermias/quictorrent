@@ -6,8 +6,8 @@
 //! el cliente cierra su extremo.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
@@ -25,16 +25,19 @@ use crate::state::{ClientState, DownloadState};
 ///   lo dispara, el daemon abandona su select principal.
 pub async fn run_ipc_server(
     socket_path: PathBuf,
-    flow_ids:    Vec<(String, Arc<FlowCtx>)>,
-    state_path:  PathBuf,
+    flow_ids: Vec<(String, Arc<FlowCtx>)>,
+    state_path: PathBuf,
     shutdown_tx: watch::Sender<bool>,
 ) {
     // Eliminar socket residual de ejecuciones anteriores.
     let _ = std::fs::remove_file(&socket_path);
 
     let listener = match UnixListener::bind(&socket_path) {
-        Ok(l)  => l,
-        Err(e) => { warn!("IPC bind {:?}: {e}", socket_path); return; }
+        Ok(l) => l,
+        Err(e) => {
+            warn!("IPC bind {:?}: {e}", socket_path);
+            return;
+        }
     };
     info!("IPC socket: {:?}", socket_path);
 
@@ -65,9 +68,9 @@ pub async fn run_ipc_server(
 }
 
 async fn handle_conn(
-    stream:      tokio::net::UnixStream,
-    flow_ids:    Vec<(String, Arc<FlowCtx>)>,
-    state_path:  PathBuf,
+    stream: tokio::net::UnixStream,
+    flow_ids: Vec<(String, Arc<FlowCtx>)>,
+    state_path: PathBuf,
     shutdown_tx: Arc<watch::Sender<bool>>,
 ) {
     let (read_half, mut write_half) = stream.into_split();
@@ -75,11 +78,15 @@ async fn handle_conn(
 
     while let Ok(Some(line)) = lines.next_line().await {
         let req: IpcRequest = match serde_json::from_str(&line) {
-            Ok(r)  => r,
+            Ok(r) => r,
             Err(e) => {
-                send(&mut write_half, &IpcResponse::Error {
-                    message: format!("parse error: {e}"),
-                }).await;
+                send(
+                    &mut write_half,
+                    &IpcResponse::Error {
+                        message: format!("parse error: {e}"),
+                    },
+                )
+                .await;
                 continue;
             }
         };
@@ -101,8 +108,8 @@ async fn send<W: AsyncWriteExt + Unpin>(w: &mut W, resp: &IpcResponse) {
 }
 
 async fn dispatch(
-    req:       IpcRequest,
-    flow_ids:  &[(String, Arc<FlowCtx>)],
+    req: IpcRequest,
+    flow_ids: &[(String, Arc<FlowCtx>)],
     state_path: &std::path::Path,
 ) -> IpcResponse {
     match req {
@@ -112,61 +119,69 @@ async fn dispatch(
         IpcRequest::Shutdown => IpcResponse::Ok,
 
         IpcRequest::Status => {
-            let flows = flow_ids.iter().map(|(id, ctx)| {
-                let complete = *ctx.complete_tx.borrow();
-                IpcFlowInfo {
-                    id:         id.clone(),
-                    name:       ctx.meta.name.clone(),
-                    state:      if complete { "seeding".into() } else { "downloading".into() },
-                    downloaded: ctx.downloaded.load(Ordering::Relaxed),
-                    total_size: ctx.meta.total_size(),
-                    peers:      ctx.peer_count.load(Ordering::Relaxed),
-                }
-            }).collect();
+            let flows = flow_ids
+                .iter()
+                .map(|(id, ctx)| {
+                    let complete = *ctx.complete_tx.borrow();
+                    IpcFlowInfo {
+                        id: id.clone(),
+                        name: ctx.meta.name.clone(),
+                        state: if complete {
+                            "seeding".into()
+                        } else {
+                            "downloading".into()
+                        },
+                        downloaded: ctx.downloaded.load(Ordering::Relaxed),
+                        total_size: ctx.meta.total_size(),
+                        peers: ctx.peer_count.load(Ordering::Relaxed),
+                    }
+                })
+                .collect();
             IpcResponse::Status { flows }
         }
 
-        IpcRequest::FlowPeers { id } => {
-            match flow_ids.iter().find(|(fid, _)| fid == &id) {
-                Some((_, ctx)) => IpcResponse::Peers {
-                    count: ctx.peer_count.load(Ordering::Relaxed),
-                },
-                None => IpcResponse::Error {
-                    message: format!("flow '{id}' not active in daemon"),
-                },
-            }
-        }
+        IpcRequest::FlowPeers { id } => match flow_ids.iter().find(|(fid, _)| fid == &id) {
+            Some((_, ctx)) => IpcResponse::Peers {
+                count: ctx.peer_count.load(Ordering::Relaxed),
+            },
+            None => IpcResponse::Error {
+                message: format!("flow '{id}' not active in daemon"),
+            },
+        },
 
         IpcRequest::FlowStart { id } => {
             match set_state(state_path, &id, DownloadState::Downloading) {
-                Ok(())  => IpcResponse::Ok,
-                Err(e)  => IpcResponse::Error { message: e.to_string() },
+                Ok(()) => IpcResponse::Ok,
+                Err(e) => IpcResponse::Error {
+                    message: e.to_string(),
+                },
             }
         }
 
-        IpcRequest::FlowPause { id } => {
-            match set_state(state_path, &id, DownloadState::Paused) {
-                Ok(())  => IpcResponse::Ok,
-                Err(e)  => IpcResponse::Error { message: e.to_string() },
-            }
-        }
+        IpcRequest::FlowPause { id } => match set_state(state_path, &id, DownloadState::Paused) {
+            Ok(()) => IpcResponse::Ok,
+            Err(e) => IpcResponse::Error {
+                message: e.to_string(),
+            },
+        },
 
-        IpcRequest::FlowStop { id } => {
-            match remove_flow(state_path, &id) {
-                Ok(())  => IpcResponse::Ok,
-                Err(e)  => IpcResponse::Error { message: e.to_string() },
-            }
-        }
+        IpcRequest::FlowStop { id } => match remove_flow(state_path, &id) {
+            Ok(()) => IpcResponse::Ok,
+            Err(e) => IpcResponse::Error {
+                message: e.to_string(),
+            },
+        },
     }
 }
 
 fn set_state(
     state_path: &std::path::Path,
-    id:         &str,
-    new_state:  DownloadState,
+    id: &str,
+    new_state: DownloadState,
 ) -> anyhow::Result<()> {
     let mut state = ClientState::load(state_path)?;
-    let entry = state.get_mut(id)
+    let entry = state
+        .get_mut(id)
         .ok_or_else(|| anyhow::anyhow!("flow '{id}' not found"))?;
     entry.state = new_state;
     state.save(state_path)?;
@@ -179,7 +194,9 @@ fn remove_flow(state_path: &std::path::Path, id: &str) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("flow '{id}' not found"));
     }
     // Eliminar por id corto o info_hash completo.
-    state.flows.retain(|k, v| k != id && !v.info_hash.starts_with(id));
+    state
+        .flows
+        .retain(|k, v| k != id && !v.info_hash.starts_with(id));
     state.save(state_path)?;
     Ok(())
 }
@@ -196,7 +213,10 @@ mod tests {
         let stream = UnixStream::connect(socket_path).await.unwrap();
         let (read_half, mut write_half) = stream.into_split();
         let json = serde_json::to_string(req).unwrap();
-        write_half.write_all(format!("{json}\n").as_bytes()).await.unwrap();
+        write_half
+            .write_all(format!("{json}\n").as_bytes())
+            .await
+            .unwrap();
         let mut lines = BufReader::new(read_half).lines();
         let line = lines.next_line().await.unwrap().unwrap();
         serde_json::from_str(&line).unwrap()
@@ -209,7 +229,10 @@ mod tests {
         let (shutdown_tx, _) = watch::channel(false);
 
         tokio::spawn(run_ipc_server(
-            sock.clone(), vec![], dir.path().join("state.json"), shutdown_tx,
+            sock.clone(),
+            vec![],
+            dir.path().join("state.json"),
+            shutdown_tx,
         ));
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
@@ -224,7 +247,10 @@ mod tests {
         let (shutdown_tx, _) = watch::channel(false);
 
         tokio::spawn(run_ipc_server(
-            sock.clone(), vec![], dir.path().join("state.json"), shutdown_tx,
+            sock.clone(),
+            vec![],
+            dir.path().join("state.json"),
+            shutdown_tx,
         ));
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
@@ -243,7 +269,10 @@ mod tests {
         let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
 
         tokio::spawn(run_ipc_server(
-            sock.clone(), vec![], dir.path().join("state.json"), shutdown_tx,
+            sock.clone(),
+            vec![],
+            dir.path().join("state.json"),
+            shutdown_tx,
         ));
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
@@ -251,10 +280,10 @@ mod tests {
         assert!(matches!(resp, IpcResponse::Ok));
 
         // La señal de shutdown debe haberse disparado.
-        tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            shutdown_rx.changed(),
-        ).await.expect("timeout esperando señal shutdown").unwrap();
+        tokio::time::timeout(std::time::Duration::from_millis(100), shutdown_rx.changed())
+            .await
+            .expect("timeout esperando señal shutdown")
+            .unwrap();
         assert!(*shutdown_rx.borrow());
     }
 
@@ -265,11 +294,20 @@ mod tests {
         let (shutdown_tx, _) = watch::channel(false);
 
         tokio::spawn(run_ipc_server(
-            sock.clone(), vec![], dir.path().join("state.json"), shutdown_tx,
+            sock.clone(),
+            vec![],
+            dir.path().join("state.json"),
+            shutdown_tx,
         ));
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
-        let resp = ipc_roundtrip(&sock, &IpcRequest::FlowPeers { id: "notexist".into() }).await;
+        let resp = ipc_roundtrip(
+            &sock,
+            &IpcRequest::FlowPeers {
+                id: "notexist".into(),
+            },
+        )
+        .await;
         assert!(matches!(resp, IpcResponse::Error { .. }));
     }
 }

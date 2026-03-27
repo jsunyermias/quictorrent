@@ -1,24 +1,27 @@
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, atomic::{AtomicU64, AtomicUsize, Ordering}};
+use std::sync::{
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+    Arc,
+};
 
 use anyhow::{Context, Result};
-use tokio::sync::{Mutex, broadcast, watch};
+use tokio::sync::{broadcast, watch, Mutex};
 use tracing::{info, warn};
 
-use bitturbulence_pieces::{BlockScheduler, TorrentStore, piece_root_from_block_hashes};
+use bitturbulence_pieces::{piece_root_from_block_hashes, BlockScheduler, TorrentStore};
 use bitturbulence_protocol::Metainfo;
 
 use super::scheduler_actor::SchedulerHandle;
 
 /// Estado compartido de un BitFlow activo.
 pub struct FlowCtx {
-    pub meta:      Metainfo,
-    pub store:     TorrentStore,
+    pub meta: Metainfo,
+    pub store: TorrentStore,
     pub save_path: PathBuf,
     /// Actor que gestiona los BlockSchedulers de todos los archivos sin locks.
     pub sched: SchedulerHandle,
     /// have[fi][pi] = pieza verificada y completa (para anunciar a peers).
-    pub have:  Mutex<Vec<Vec<bool>>>,
+    pub have: Mutex<Vec<Vec<bool>>>,
     /// Bytes descargados y verificados.
     pub downloaded: AtomicU64,
     /// Peers conectados actualmente.
@@ -33,7 +36,8 @@ pub struct FlowCtx {
 
 impl FlowCtx {
     pub async fn new(meta: Metainfo, save_path: &Path, seeding: bool) -> Result<Arc<Self>> {
-        let store = TorrentStore::open(save_path, &meta).await
+        let store = TorrentStore::open(save_path, &meta)
+            .await
             .context("opening torrent store")?;
 
         let persisted = if !seeding {
@@ -43,26 +47,28 @@ impl FlowCtx {
         };
 
         let mut raw_schedulers = Vec::with_capacity(meta.files.len());
-        let mut have_init      = Vec::with_capacity(meta.files.len());
+        let mut have_init = Vec::with_capacity(meta.files.len());
 
         for fi in 0..meta.files.len() {
-            let file    = store.file(fi);
-            let num     = file.num_pieces() as usize;
-            let pl      = meta.files[fi].piece_length();
+            let file = store.file(fi);
+            let num = file.num_pieces() as usize;
+            let pl = meta.files[fi].piece_length();
             let last_pl = meta.files[fi].last_piece_length();
 
             let mut sched = BlockScheduler::new(fi, num, pl, last_pl);
 
             let file_have = if seeding {
-                for pi in 0..num { sched.mark_piece_verified(pi as u32); }
+                for pi in 0..num {
+                    sched.mark_piece_verified(pi as u32);
+                }
                 vec![true; num]
             } else if let Some(ref saved) = persisted {
                 let saved_file = saved.get(fi).map(|v| v.as_slice()).unwrap_or(&[]);
                 let mut hv = vec![false; num];
-                for pi in 0..num {
+                for (pi, h) in hv.iter_mut().enumerate() {
                     if saved_file.get(pi).copied().unwrap_or(false) {
                         sched.mark_piece_verified(pi as u32);
-                        hv[pi] = true;
+                        *h = true;
                     }
                 }
                 hv
@@ -89,8 +95,8 @@ impl FlowCtx {
             0
         };
 
-        let (complete_tx, _)    = watch::channel(false);
-        let (have_piece_tx, _)  = broadcast::channel(64);
+        let (complete_tx, _) = watch::channel(false);
+        let (have_piece_tx, _) = broadcast::channel(64);
 
         Ok(Arc::new(Self {
             sched: SchedulerHandle::spawn(raw_schedulers),
@@ -124,8 +130,8 @@ impl FlowCtx {
                 return false;
             }
         };
-        let expected    = &self.meta.files[fi].piece_hashes[pi as usize];
-        let computed    = piece_root_from_block_hashes(&block_hashes);
+        let expected = &self.meta.files[fi].piece_hashes[pi as usize];
+        let computed = piece_root_from_block_hashes(&block_hashes);
         let piece_bytes = self.meta.files[fi].piece_len(pi) as u64;
         if &computed == expected {
             let have_snapshot = {
@@ -166,8 +172,13 @@ impl FlowCtx {
         }
         if self.sched.is_complete().await {
             let id: String = self.meta.info_hash[..4]
-                .iter().map(|b| format!("{b:02x}")).collect();
-            info!("[{id}] {} — descarga completa, pasando a seeder", self.meta.name);
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect();
+            info!(
+                "[{id}] {} — descarga completa, pasando a seeder",
+                self.meta.name
+            );
             // send_replace actualiza el valor y notifica a receivers activos
             // aunque no haya ninguno suscrito todavía (a diferencia de send()).
             self.complete_tx.send_replace(true);
@@ -188,13 +199,13 @@ mod tests {
             name: "test.bin".into(),
             info_hash: [0u8; 32],
             files: vec![FileEntry {
-                path:         vec!["test.bin".into()],
-                size:         bitturbulence_protocol::BLOCK_SIZE as u64,
+                path: vec!["test.bin".into()],
+                size: bitturbulence_protocol::BLOCK_SIZE as u64,
                 piece_hashes: vec![[0u8; 32]],
-                priority:     Priority::Normal,
+                priority: Priority::Normal,
             }],
             trackers: vec![],
-            comment:  None,
+            comment: None,
         }
     }
 
@@ -202,26 +213,38 @@ mod tests {
     async fn signal_if_complete_fires_when_seeding() {
         let dir = tempfile::tempdir().unwrap();
         // seeding=true: todas las piezas pre-verificadas en el constructor.
-        let ctx = FlowCtx::new(minimal_meta(), dir.path(), true).await.unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), true)
+            .await
+            .unwrap();
 
         assert!(!*ctx.complete_tx.borrow(), "no debe emitir antes de llamar");
         ctx.signal_if_complete().await;
-        assert!(*ctx.complete_tx.borrow(), "debe emitir porque el flow está completo");
+        assert!(
+            *ctx.complete_tx.borrow(),
+            "debe emitir porque el flow está completo"
+        );
     }
 
     #[tokio::test]
     async fn signal_if_complete_no_fire_when_incomplete() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false)
+            .await
+            .unwrap();
 
         ctx.signal_if_complete().await;
-        assert!(!*ctx.complete_tx.borrow(), "no debe emitir si quedan piezas pendientes");
+        assert!(
+            !*ctx.complete_tx.borrow(),
+            "no debe emitir si quedan piezas pendientes"
+        );
     }
 
     #[tokio::test]
     async fn signal_if_complete_is_idempotent() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = FlowCtx::new(minimal_meta(), dir.path(), true).await.unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), true)
+            .await
+            .unwrap();
 
         ctx.signal_if_complete().await;
         ctx.signal_if_complete().await; // segunda llamada: no-op
@@ -231,7 +254,9 @@ mod tests {
     #[tokio::test]
     async fn have_piece_broadcast_fires_on_verify() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false)
+            .await
+            .unwrap();
         let mut rx = ctx.have_piece_tx.subscribe();
 
         let _ = ctx.have_piece_tx.send((0, 0));
@@ -246,16 +271,26 @@ mod tests {
         let have = vec![vec![true]];
         bitturbulence_pieces::save_have(dir.path(), &have).unwrap();
 
-        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false)
+            .await
+            .unwrap();
 
-        assert!(ctx.is_complete().await, "pieza restaurada debe marcar el flow como completo");
-        assert!(ctx.have.lock().await[0][0], "have[0][0] debe ser true tras restaurar");
+        assert!(
+            ctx.is_complete().await,
+            "pieza restaurada debe marcar el flow como completo"
+        );
+        assert!(
+            ctx.have.lock().await[0][0],
+            "have[0][0] debe ser true tras restaurar"
+        );
     }
 
     #[tokio::test]
     async fn verify_and_complete_persists_have() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = FlowCtx::new(minimal_meta(), dir.path(), true).await.unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), true)
+            .await
+            .unwrap();
 
         assert_eq!(ctx.save_path, dir.path());
     }
@@ -263,7 +298,9 @@ mod tests {
     #[tokio::test]
     async fn complete_rx_fires_after_signal() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = FlowCtx::new(minimal_meta(), dir.path(), true).await.unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), true)
+            .await
+            .unwrap();
 
         // Subscribir un receiver ANTES de llamar a signal_if_complete.
         let mut rx = ctx.complete_tx.subscribe();
@@ -280,7 +317,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         // minimal_meta: piece_hashes[0] = [0u8; 32]
         // merkle_root([h]) = h, así que block_done con [0u8; 32] debe coincidir.
-        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false)
+            .await
+            .unwrap();
         let mut rx = ctx.have_piece_tx.subscribe();
 
         let piece_ready = ctx.sched.block_done(0, 0, 0, [0u8; 32]).await;
@@ -293,14 +332,20 @@ mod tests {
             ctx.downloaded.load(std::sync::atomic::Ordering::Relaxed),
             bitturbulence_protocol::BLOCK_SIZE as u64,
         );
-        assert_eq!(rx.try_recv().unwrap(), (0, 0), "have_piece_tx debe emitir (0,0)");
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            (0, 0),
+            "have_piece_tx debe emitir (0,0)"
+        );
     }
 
     #[tokio::test]
     async fn verify_and_complete_fails_with_wrong_hash() {
         let dir = tempfile::tempdir().unwrap();
         // piece_hashes[0] = [0u8; 32]; enviamos [0xFFu8; 32] → mismatch.
-        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false)
+            .await
+            .unwrap();
 
         let _ = ctx.sched.block_done(0, 0, 0, [0xFFu8; 32]).await;
 
@@ -313,7 +358,9 @@ mod tests {
     #[tokio::test]
     async fn our_bitfield_returns_have_state() {
         let dir = tempfile::tempdir().unwrap();
-        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false)
+            .await
+            .unwrap();
 
         assert_eq!(ctx.our_bitfield(0).await, vec![false]);
 

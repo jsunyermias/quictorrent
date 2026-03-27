@@ -1,7 +1,9 @@
 use bitturbulence_protocol::BLOCK_SIZE;
 
+use super::types::{
+    block_length, BlockState, BlockTask, MAX_STREAMS_PER_BLOCK, TYPICAL_STREAMS_PER_BLOCK,
+};
 use super::BlockScheduler;
-use super::types::{BlockState, BlockTask, block_length, TYPICAL_STREAMS_PER_BLOCK, MAX_STREAMS_PER_BLOCK};
 
 impl BlockScheduler {
     /// Selecciona el siguiente bloque a descargar para un stream QUIC.
@@ -21,14 +23,16 @@ impl BlockScheduler {
         if let Some(t) = self.find_block(peer_pieces, |s| *s == BlockState::Pending) {
             return Some(t);
         }
-        if let Some(t) = self.find_block(peer_pieces, |s| {
-            matches!(s, BlockState::InFlight(n) if *n < TYPICAL_STREAMS_PER_BLOCK)
-        }) {
+        if let Some(t) = self.find_block(
+            peer_pieces,
+            |s| matches!(s, BlockState::InFlight(n) if *n < TYPICAL_STREAMS_PER_BLOCK),
+        ) {
             return Some(t);
         }
-        self.find_block(peer_pieces, |s| {
-            matches!(s, BlockState::InFlight(n) if *n < MAX_STREAMS_PER_BLOCK)
-        })
+        self.find_block(
+            peer_pieces,
+            |s| matches!(s, BlockState::InFlight(n) if *n < MAX_STREAMS_PER_BLOCK),
+        )
     }
 
     /// Como [`schedule`], pero solo devuelve bloques `Pending`.
@@ -49,9 +53,15 @@ impl BlockScheduler {
         let mut best: Option<(usize, u32)> = None;
 
         for pi in 0..self.num_pieces {
-            if self.piece_done[pi] || self.piece_verifying[pi] { continue; }
-            if !peer_pieces.get(pi).copied().unwrap_or(false) { continue; }
-            if !self.block_state[pi].iter().any(|s| predicate(s)) { continue; }
+            if self.piece_done[pi] || self.piece_verifying[pi] {
+                continue;
+            }
+            if !peer_pieces.get(pi).copied().unwrap_or(false) {
+                continue;
+            }
+            if !self.block_state[pi].iter().any(&predicate) {
+                continue;
+            }
 
             let avail = self.availability[pi];
             match best {
@@ -66,15 +76,27 @@ impl BlockScheduler {
         for bi in 0..self.block_state[pi].len() {
             if predicate(&self.block_state[pi][bi]) {
                 let n = match self.block_state[pi][bi] {
-                    BlockState::Pending     => 1,
+                    BlockState::Pending => 1,
                     BlockState::InFlight(n) => n + 1,
-                    BlockState::Done        => continue,
+                    BlockState::Done => continue,
                 };
                 self.block_state[pi][bi] = BlockState::InFlight(n);
 
-                let begin  = bi as u32 * BLOCK_SIZE;
-                let length = block_length(pi, bi, self.num_pieces, self.piece_length, self.last_piece_len);
-                return Some(BlockTask { fi: self.fi, pi: pi as u32, bi: bi as u32, begin, length });
+                let begin = bi as u32 * BLOCK_SIZE;
+                let length = block_length(
+                    pi,
+                    bi,
+                    self.num_pieces,
+                    self.piece_length,
+                    self.last_piece_len,
+                );
+                return Some(BlockTask {
+                    fi: self.fi,
+                    pi: pi as u32,
+                    bi: bi as u32,
+                    begin,
+                    length,
+                });
             }
         }
 

@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use quinn::{ClientConfig, ServerConfig};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use std::sync::Arc;
 
 use crate::error::{Result, TransportError};
 
@@ -20,9 +20,7 @@ pub fn generate_self_signed_cert() -> Result<(CertificateDer<'static>, PrivateKe
         .map_err(|e| TransportError::CertGen(e.to_string()))?;
 
     let cert_der = CertificateDer::from(cert.cert.der().to_vec());
-    let key_der = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-        cert.key_pair.serialize_der(),
-    ));
+    let key_der = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der()));
 
     Ok((cert_der, key_der))
 }
@@ -75,9 +73,7 @@ fn default_transport_config() -> quinn::TransportConfig {
     // Keep-alive cada 10s para mantener la conexión a través de NATs.
     t.keep_alive_interval(Some(std::time::Duration::from_secs(10)));
     // Timeout de idle: 30s sin actividad cierra la conexión.
-    t.max_idle_timeout(Some(
-        quinn::VarInt::from_u32(30_000).into(),
-    ));
+    t.max_idle_timeout(Some(quinn::VarInt::from_u32(30_000).into()));
     t
 }
 

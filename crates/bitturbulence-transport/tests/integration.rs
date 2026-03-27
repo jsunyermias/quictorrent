@@ -1,7 +1,7 @@
-use std::net::SocketAddr;
-use futures_util::{SinkExt, StreamExt};
 use bitturbulence_protocol::Message;
 use bitturbulence_transport::QuicEndpoint;
+use futures_util::{SinkExt, StreamExt};
+use std::net::SocketAddr;
 
 #[tokio::test]
 async fn two_peers_exchange_message() {
@@ -18,9 +18,21 @@ async fn two_peers_exchange_message() {
     let client = QuicEndpoint::client_only().unwrap();
     let peer = client.connect(server_addr).await.unwrap();
     let (mut writer, _reader) = peer.open_bidi_stream().await.unwrap();
-    writer.send(Message::HavePiece { file_index: 0, piece_index: 42 }).await.unwrap();
+    writer
+        .send(Message::HavePiece {
+            file_index: 0,
+            piece_index: 42,
+        })
+        .await
+        .unwrap();
     writer.close().await.unwrap();
 
     let received = server_task.await.unwrap();
-    assert_eq!(received, Message::HavePiece { file_index: 0, piece_index: 42 });
+    assert_eq!(
+        received,
+        Message::HavePiece {
+            file_index: 0,
+            piece_index: 42
+        }
+    );
 }

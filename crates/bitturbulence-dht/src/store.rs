@@ -1,21 +1,21 @@
+use bytes::Bytes;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use bytes::Bytes;
 
 /// TTL para valores almacenados (24 horas).
 const VALUE_TTL: Duration = Duration::from_secs(86400);
 /// TTL para peers anunciados (30 minutos).
-const PEER_TTL:  Duration = Duration::from_secs(1800);
+const PEER_TTL: Duration = Duration::from_secs(1800);
 
 #[derive(Debug, Clone)]
 struct ValueEntry {
-    value:   Bytes,
+    value: Bytes,
     expires: Instant,
 }
 
 #[derive(Debug, Clone)]
 struct PeerEntry {
-    addr:    String,
+    addr: String,
     expires: Instant,
 }
 
@@ -23,23 +23,29 @@ struct PeerEntry {
 #[derive(Debug, Default)]
 pub struct ValueStore {
     values: HashMap<[u8; 32], Vec<ValueEntry>>,
-    peers:  HashMap<[u8; 32], Vec<PeerEntry>>,
+    peers: HashMap<[u8; 32], Vec<PeerEntry>>,
 }
 
 impl ValueStore {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Almacena un valor bajo una clave.
     pub fn put(&mut self, key: [u8; 32], value: Bytes) {
         self.purge_expired();
-        let entry = ValueEntry { value, expires: Instant::now() + VALUE_TTL };
+        let entry = ValueEntry {
+            value,
+            expires: Instant::now() + VALUE_TTL,
+        };
         self.values.entry(key).or_default().push(entry);
     }
 
     /// Obtiene todos los valores vigentes bajo una clave.
     pub fn get(&mut self, key: &[u8; 32]) -> Vec<Bytes> {
         self.purge_expired();
-        self.values.get(key)
+        self.values
+            .get(key)
             .map(|entries| entries.iter().map(|e| e.value.clone()).collect())
             .unwrap_or_default()
     }
@@ -53,13 +59,17 @@ impl ValueStore {
             e.expires = Instant::now() + PEER_TTL;
             return;
         }
-        entries.push(PeerEntry { addr, expires: Instant::now() + PEER_TTL });
+        entries.push(PeerEntry {
+            addr,
+            expires: Instant::now() + PEER_TTL,
+        });
     }
 
     /// Obtiene peers vigentes para un info_hash.
     pub fn get_peers(&mut self, info_hash: &[u8; 32]) -> Vec<String> {
         self.purge_expired();
-        self.peers.get(info_hash)
+        self.peers
+            .get(info_hash)
             .map(|entries| entries.iter().map(|e| e.addr.clone()).collect())
             .unwrap_or_default()
     }

@@ -1,7 +1,7 @@
-use std::net::SocketAddr;
 use bitturbulence_peer::PeerSession;
 use bitturbulence_protocol::AuthPayload;
 use bitturbulence_transport::QuicEndpoint;
+use std::net::SocketAddr;
 
 const INFO_HASH: [u8; 32] = [0xAB; 32];
 const PEER_ID_A: [u8; 32] = [0x41; 32];

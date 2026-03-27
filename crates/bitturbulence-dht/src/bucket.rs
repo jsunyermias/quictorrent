@@ -1,6 +1,6 @@
-use std::time::Instant;
-use serde::{Deserialize, Serialize};
 use crate::node_id::NodeId;
+use serde::{Deserialize, Serialize};
+use std::time::Instant;
 
 /// Número máximo de nodos por bucket (parámetro k de Kademlia).
 pub const K: usize = 20;
@@ -8,15 +8,19 @@ pub const K: usize = 20;
 /// Información de un nodo en la tabla de routing.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeInfo {
-    pub id:        NodeId,
-    pub addr:      String,
+    pub id: NodeId,
+    pub addr: String,
     #[serde(skip)]
     pub last_seen: Option<Instant>,
 }
 
 impl NodeInfo {
     pub fn new(id: NodeId, addr: String) -> Self {
-        Self { id, addr, last_seen: Some(Instant::now()) }
+        Self {
+            id,
+            addr,
+            last_seen: Some(Instant::now()),
+        }
     }
 
     pub fn touch(&mut self) {
@@ -25,7 +29,9 @@ impl NodeInfo {
 }
 
 impl PartialEq for NodeInfo {
-    fn eq(&self, other: &Self) -> bool { self.id == other.id }
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
 }
 
 /// Un k-bucket: lista de hasta K nodos ordenados por antigüedad (LRU).
@@ -35,7 +41,9 @@ pub struct KBucket {
 }
 
 impl KBucket {
-    pub fn new() -> Self { Self { nodes: Vec::new() } }
+    pub fn new() -> Self {
+        Self { nodes: Vec::new() }
+    }
 
     /// Añade o actualiza un nodo. Si el bucket está lleno, descarta el
     /// candidato (el nodo más antiguo se mantiene — política Kademlia).
@@ -60,11 +68,17 @@ impl KBucket {
         self.nodes.retain(|n| &n.id != id);
     }
 
-    pub fn nodes(&self) -> &[NodeInfo] { &self.nodes }
+    pub fn nodes(&self) -> &[NodeInfo] {
+        &self.nodes
+    }
 
-    pub fn len(&self) -> usize { self.nodes.len() }
+    pub fn len(&self) -> usize {
+        self.nodes.len()
+    }
 
-    pub fn is_empty(&self) -> bool { self.nodes.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
 }
 
 #[cfg(test)]

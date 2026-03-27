@@ -1,9 +1,9 @@
+use futures_util::SinkExt;
 use quinn::{Connection, RecvStream, SendStream};
 use tokio_util::codec::{FramedRead, FramedWrite};
-use futures_util::SinkExt;
 
-use bitturbulence_protocol::{Message, MessageCodec};
 use crate::error::Result;
+use bitturbulence_protocol::{Message, MessageCodec};
 
 #[derive(Clone, Debug)]
 pub struct PeerConnection {

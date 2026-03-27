@@ -1,12 +1,12 @@
-use std::path::PathBuf;
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
     name = "submarine",
     about = "Submarine — cliente BitTurbulence",
     version,
-    propagate_version = true,
+    propagate_version = true
 )]
 pub struct Cli {
     /// Fichero de configuración (por defecto ~/.submarine/config.json).
@@ -56,17 +56,11 @@ pub enum FlowAction {
         id: String,
     },
     /// Pausa la descarga de un BitFlow.
-    Pause {
-        id: String,
-    },
+    Pause { id: String },
     /// Elimina un BitFlow de la lista.
-    Stop {
-        id: String,
-    },
+    Stop { id: String },
     /// Muestra los peers conectados a un BitFlow.
-    Peers {
-        id: String,
-    },
+    Peers { id: String },
     /// Crea un fichero .bitflow a partir de un archivo o directorio.
     Create {
         /// Archivo o directorio a empaquetar.
