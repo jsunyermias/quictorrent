@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, atomic::{AtomicU64, AtomicUsize, Ordering}};
 
 use anyhow::{Context, Result};
@@ -12,8 +12,9 @@ use super::scheduler_actor::SchedulerHandle;
 
 /// Estado compartido de un BitFlow activo.
 pub struct FlowCtx {
-    pub meta:  Metainfo,
-    pub store: TorrentStore,
+    pub meta:      Metainfo,
+    pub store:     TorrentStore,
+    pub save_path: PathBuf,
     /// Actor que gestiona los BlockSchedulers de todos los archivos sin locks.
     pub sched: SchedulerHandle,
     /// have[fi][pi] = pieza verificada y completa (para anunciar a peers).
@@ -35,6 +36,12 @@ impl FlowCtx {
         let store = TorrentStore::open(save_path, &meta).await
             .context("opening torrent store")?;
 
+        let persisted = if !seeding {
+            bitturbulence_pieces::load_have(save_path).unwrap_or_default()
+        } else {
+            None
+        };
+
         let mut raw_schedulers = Vec::with_capacity(meta.files.len());
         let mut have_init      = Vec::with_capacity(meta.files.len());
 
@@ -49,6 +56,16 @@ impl FlowCtx {
             let file_have = if seeding {
                 for pi in 0..num { sched.mark_piece_verified(pi as u32); }
                 vec![true; num]
+            } else if let Some(ref saved) = persisted {
+                let saved_file = saved.get(fi).map(|v| v.as_slice()).unwrap_or(&[]);
+                let mut hv = vec![false; num];
+                for pi in 0..num {
+                    if saved_file.get(pi).copied().unwrap_or(false) {
+                        sched.mark_piece_verified(pi as u32);
+                        hv[pi] = true;
+                    }
+                }
+                hv
             } else {
                 vec![false; num]
             };
@@ -57,6 +74,21 @@ impl FlowCtx {
             have_init.push(file_have);
         }
 
+        let initial_downloaded: u64 = if let Some(ref saved) = persisted {
+            let mut total = 0u64;
+            for fi in 0..meta.files.len() {
+                let saved_file = saved.get(fi).map(|v| v.as_slice()).unwrap_or(&[]);
+                for pi in 0..meta.files[fi].piece_hashes.len() {
+                    if saved_file.get(pi).copied().unwrap_or(false) {
+                        total += meta.files[fi].piece_len(pi as u32) as u64;
+                    }
+                }
+            }
+            total
+        } else {
+            0
+        };
+
         let (complete_tx, _)    = watch::channel(false);
         let (have_piece_tx, _)  = broadcast::channel(64);
 
@@ -64,8 +96,9 @@ impl FlowCtx {
             sched: SchedulerHandle::spawn(raw_schedulers),
             meta,
             store,
+            save_path: save_path.to_path_buf(),
             have: Mutex::new(have_init),
-            downloaded: AtomicU64::new(0),
+            downloaded: AtomicU64::new(initial_downloaded),
             peer_count: AtomicUsize::new(0),
             complete_tx,
             have_piece_tx,
@@ -97,6 +130,15 @@ impl FlowCtx {
         if &computed == expected {
             self.have.lock().await[fi][pi as usize] = true;
             let _ = self.have_piece_tx.send((fi, pi));
+            {
+                let have_snapshot = self.have.lock().await.clone();
+                let sp = self.save_path.clone();
+                tokio::task::spawn_blocking(move || {
+                    if let Err(e) = bitturbulence_pieces::save_have(&sp, &have_snapshot) {
+                        tracing::warn!("persist have: {e}");
+                    }
+                });
+            }
             self.sched.mark_piece_verified(fi, pi).await;
             self.downloaded.fetch_add(piece_bytes, Ordering::Relaxed);
             info!(fi, pi, bytes = piece_bytes, "piece merkle root ok");
@@ -194,6 +236,27 @@ mod tests {
         let _ = ctx.have_piece_tx.send((0, 0));
         let msg = rx.recv().await.unwrap();
         assert_eq!(msg, (0, 0));
+    }
+
+    #[tokio::test]
+    async fn resume_restores_verified_pieces() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let have = vec![vec![true]];
+        bitturbulence_pieces::save_have(dir.path(), &have).unwrap();
+
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), false).await.unwrap();
+
+        assert!(ctx.is_complete().await, "pieza restaurada debe marcar el flow como completo");
+        assert!(ctx.have.lock().await[0][0], "have[0][0] debe ser true tras restaurar");
+    }
+
+    #[tokio::test]
+    async fn verify_and_complete_persists_have() {
+        let dir = tempfile::tempdir().unwrap();
+        let ctx = FlowCtx::new(minimal_meta(), dir.path(), true).await.unwrap();
+
+        assert_eq!(ctx.save_path, dir.path());
     }
 
     #[tokio::test]
