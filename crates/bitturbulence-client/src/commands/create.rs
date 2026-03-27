@@ -50,11 +50,15 @@ pub fn cmd_create(
         return Err(anyhow!("no files found in {:?}", abs));
     }
 
+    // Cada tracker CLI se convierte en su propio tier (BEP 12).
+    // Así un fallo de un tracker no bloquea los demás.
+    let tracker_tiers: Vec<Vec<String>> = trackers.iter().map(|t| vec![t.clone()]).collect();
     let mut meta = Metainfo {
         name: name.clone(),
         info_hash: [0u8; 32],
         files,
         trackers,
+        tracker_tiers,
         comment,
     };
     meta.info_hash = meta.compute_info_hash();

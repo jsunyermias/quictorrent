@@ -54,6 +54,9 @@ pub const HELLO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10
 pub const KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
 /// Timeout para recibir HashResponse tras enviar HashRequest.
 pub const HASH_RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+/// Timeout para recibir un Piece tras enviar un Request.
+/// Si el filler no responde en este tiempo, el bloque se considera snubbed.
+pub const SNUB_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 pub const ANNOUNCE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(300);
 pub const STATE_SAVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 pub const PROTOCOL_VERSION: u8 = bitturbulence_protocol::PROTOCOL_VERSION;
@@ -134,9 +137,10 @@ pub async fn run_daemon(config: &Config, state_path: &Path) -> Result<()> {
 
     for (_, ctx) in &flow_ids {
         let known_peers = Arc::new(Mutex::new(HashSet::<String>::new()));
-        for tracker_url in &ctx.meta.trackers {
-            tokio::spawn(tracker::tracker_loop(
-                tracker_url.clone(),
+        // Lanzar un tier_announce_loop por cada tier (BEP 12).
+        for tier in ctx.meta.effective_tiers() {
+            tokio::spawn(tracker::tier_announce_loop(
+                tier,
                 ctx.clone(),
                 endpoint.clone(),
                 our_peer_id,

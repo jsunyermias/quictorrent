@@ -143,6 +143,9 @@ pub async fn run_peer_downloader(
     // Contadores para detección de inestabilidad.
     let mut recent_fails: u32 = 0;
     let mut blocks_ok: u32 = 0;
+    // El peer está snubbed si no respondió a un Request en SNUB_TIMEOUT.
+    // Mientras esté snubbed solo se mantiene 1 stream activo.
+    let mut snubbed = false;
 
     // ── Bucle coordinador ──────────────────────────────────────────────
     loop {
@@ -155,7 +158,9 @@ pub async fn run_peer_downloader(
         let unstable = recent_fails >= INSTABILITY_FAIL_THRESHOLD;
         let endgame = ctx.sched.total_pending().await <= ENDGAME_THRESHOLD;
         let endgame_mode = unstable || endgame;
-        let max_active = if endgame_mode {
+        let max_active = if snubbed {
+            1
+        } else if endgame_mode {
             MAX_STREAMS
         } else {
             DEFAULT_STREAMS
@@ -329,6 +334,8 @@ pub async fn run_peer_downloader(
                             recent_fails = 0;
                             blocks_ok    = 0;
                         }
+                        // El peer respondió: ya no está snubbed.
+                        snubbed = false;
                     }
                     Some(StreamResult::BlockFail { stream_id, fi, pi, bi }) => {
                         if let Some(slot) = slots.get_mut(&stream_id) {
@@ -336,6 +343,14 @@ pub async fn run_peer_downloader(
                         }
                         ctx.sched.block_failed(fi, pi, bi).await;
                         recent_fails += 1;
+                    }
+                    Some(StreamResult::BlockTimeout { stream_id, fi, pi, bi }) => {
+                        if let Some(slot) = slots.get_mut(&stream_id) {
+                            slot.active_block = None;
+                        }
+                        ctx.sched.block_failed(fi, pi, bi).await;
+                        snubbed = true;
+                        tracing::warn!(fi, pi, bi, "peer snubbed: no respondió en SNUB_TIMEOUT");
                     }
                     Some(StreamResult::StreamDead { stream_id }) => {
                         if let Some(slot) = slots.remove(&stream_id) {

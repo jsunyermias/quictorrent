@@ -559,6 +559,7 @@ async fn current_8_peers_mixed_availability() {
             priority: Priority::Normal,
         }],
         trackers: vec![],
+        tracker_tiers: vec![],
         comment: None,
     };
 

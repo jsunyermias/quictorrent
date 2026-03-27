@@ -90,6 +90,7 @@ mod tests {
                 .map(|(name, size)| FileEntry::new(vec![name.to_string()], *size, Priority::Normal))
                 .collect(),
             trackers: vec![],
+            tracker_tiers: vec![],
             comment: None,
         }
     }

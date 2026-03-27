@@ -76,6 +76,14 @@ pub(crate) enum StreamResult {
         pi: u32,
         bi: u32,
     },
+    /// El filler no respondió al Request en el tiempo máximo (`SNUB_TIMEOUT`).
+    /// El coordinador usa esto para detectar peers snubbed.
+    BlockTimeout {
+        stream_id: usize,
+        fi: usize,
+        pi: u32,
+        bi: u32,
+    },
     /// Stream muerto por error QUIC irrecuperable.
     StreamDead { stream_id: usize },
 }
@@ -92,4 +100,58 @@ pub(crate) struct StreamSlot {
     pub(crate) task_tx: mpsc::Sender<BlockTask>,
     /// Tarea actualmente asignada, o None si idle.
     pub(crate) active_block: Option<BlockTask>,
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stream_result_block_timeout_matches_correctly() {
+        let r = StreamResult::BlockTimeout {
+            stream_id: 2,
+            fi: 0,
+            pi: 5,
+            bi: 1,
+        };
+        match r {
+            StreamResult::BlockTimeout {
+                stream_id,
+                fi,
+                pi,
+                bi,
+            } => {
+                assert_eq!(stream_id, 2);
+                assert_eq!(fi, 0);
+                assert_eq!(pi, 5);
+                assert_eq!(bi, 1);
+            }
+            _ => panic!("expected BlockTimeout"),
+        }
+    }
+
+    #[test]
+    fn stream_result_block_timeout_is_not_stream_dead() {
+        let timeout = StreamResult::BlockTimeout {
+            stream_id: 0,
+            fi: 0,
+            pi: 0,
+            bi: 0,
+        };
+        assert!(
+            !matches!(timeout, StreamResult::StreamDead { .. }),
+            "BlockTimeout no debe clasificarse como StreamDead"
+        );
+    }
+
+    #[test]
+    fn snub_timeout_is_at_least_30_seconds() {
+        use crate::daemon::SNUB_TIMEOUT;
+        assert!(
+            SNUB_TIMEOUT.as_secs() >= 30,
+            "SNUB_TIMEOUT debe ser al menos 30s para no snubbear peers lentos legítimos"
+        );
+    }
 }

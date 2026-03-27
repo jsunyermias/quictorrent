@@ -172,13 +172,40 @@ pub struct Metainfo {
     pub info_hash: [u8; 32],
     /// Lista de archivos. Cada uno tiene su propio piece_length.
     pub files: Vec<FileEntry>,
-    /// Trackers opcionales.
+    /// Trackers planos (formato legado — sin tiers).
+    ///
+    /// Si `tracker_tiers` está presente y no vacío, este campo se ignora.
+    #[serde(default)]
     pub trackers: Vec<String>,
+    /// Trackers organizados en tiers (BEP 12).
+    ///
+    /// Cada tier es una lista de URLs de tracker. El cliente shufflea cada
+    /// tier al inicio, intenta los trackers en orden y promueve al frente
+    /// el primero que responda con éxito.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tracker_tiers: Vec<Vec<String>>,
     /// Comentario opcional.
     pub comment: Option<String>,
 }
 
 impl Metainfo {
+    /// Devuelve los tiers efectivos de trackers.
+    ///
+    /// Si `tracker_tiers` está definido y no vacío, se devuelve tal cual.
+    /// Si no, se envuelve `trackers` en un único tier para compatibilidad
+    /// con metainfos generados antes de BEP 12.
+    pub fn effective_tiers(&self) -> Vec<Vec<String>> {
+        if !self.tracker_tiers.is_empty() {
+            self.tracker_tiers.clone()
+        } else if !self.trackers.is_empty() {
+            // Compatibilidad: cada tracker plano forma su propio tier de 1 elemento,
+            // equivalente a `[[t1], [t2], ...]` en la semántica BEP 12.
+            self.trackers.iter().map(|t| vec![t.clone()]).collect()
+        } else {
+            vec![]
+        }
+    }
+
     /// Tamaño total de todos los archivos.
     pub fn total_size(&self) -> u64 {
         self.files.iter().map(|f| f.size).sum()
@@ -351,6 +378,7 @@ mod tests {
                 "https://tracker.example.com/announce".into(),
                 "udp://tracker2.example.com:6969/announce".into(),
             ],
+            tracker_tiers: vec![],
             comment: Some("BitFlow de prueba: 13 archivos con propiedades variadas".into()),
         };
         meta.info_hash = meta.compute_info_hash();
@@ -516,5 +544,86 @@ mod tests {
         let restored: Metainfo = serde_json::from_slice(&raw).expect("parsear .bitflow");
         assert_eq!(restored.files.len(), 13);
         assert_eq!(restored.info_hash, meta.info_hash);
+    }
+
+    #[test]
+    fn effective_tiers_uses_tracker_tiers_when_present() {
+        let meta = Metainfo {
+            name: "test".into(),
+            info_hash: [0u8; 32],
+            files: vec![],
+            trackers: vec!["flat://old".into()],
+            tracker_tiers: vec![
+                vec!["tier0a".into(), "tier0b".into()],
+                vec!["tier1a".into()],
+            ],
+            comment: None,
+        };
+        let tiers = meta.effective_tiers();
+        assert_eq!(tiers.len(), 2);
+        assert_eq!(tiers[0], vec!["tier0a", "tier0b"]);
+        assert_eq!(tiers[1], vec!["tier1a"]);
+    }
+
+    #[test]
+    fn effective_tiers_falls_back_to_flat_trackers() {
+        let meta = Metainfo {
+            name: "test".into(),
+            info_hash: [0u8; 32],
+            files: vec![],
+            trackers: vec!["tracker1".into(), "tracker2".into()],
+            tracker_tiers: vec![],
+            comment: None,
+        };
+        let tiers = meta.effective_tiers();
+        // Cada tracker plano es su propio tier de 1 elemento.
+        assert_eq!(tiers.len(), 2);
+        assert_eq!(tiers[0], vec!["tracker1"]);
+        assert_eq!(tiers[1], vec!["tracker2"]);
+    }
+
+    #[test]
+    fn effective_tiers_empty_when_no_trackers() {
+        let meta = Metainfo {
+            name: "test".into(),
+            info_hash: [0u8; 32],
+            files: vec![],
+            trackers: vec![],
+            tracker_tiers: vec![],
+            comment: None,
+        };
+        assert!(meta.effective_tiers().is_empty());
+    }
+
+    #[test]
+    fn tracker_tiers_roundtrip_serialization() {
+        let meta = Metainfo {
+            name: "test".into(),
+            info_hash: [0u8; 32],
+            files: vec![],
+            trackers: vec![],
+            tracker_tiers: vec![
+                vec!["https://t1.example.com/announce".into()],
+                vec!["https://t2.example.com/announce".into(), "https://t3.example.com/announce".into()],
+            ],
+            comment: None,
+        };
+        let json = serde_json::to_string(&meta).unwrap();
+        let restored: Metainfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.tracker_tiers, meta.tracker_tiers);
+    }
+
+    #[test]
+    fn tracker_tiers_not_serialized_when_empty() {
+        let meta = Metainfo {
+            name: "test".into(),
+            info_hash: [0u8; 32],
+            files: vec![],
+            trackers: vec![],
+            tracker_tiers: vec![],
+            comment: None,
+        };
+        let json = serde_json::to_string(&meta).unwrap();
+        assert!(!json.contains("tracker_tiers"), "no debe serializar tracker_tiers vacío");
     }
 }

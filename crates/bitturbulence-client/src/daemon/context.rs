@@ -213,6 +213,7 @@ mod tests {
                 priority: Priority::Normal,
             }],
             trackers: vec![],
+            tracker_tiers: vec![],
             comment: None,
         }
     }
